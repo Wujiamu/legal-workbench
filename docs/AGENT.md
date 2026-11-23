@@ -1,0 +1,96 @@
+# Agent 接入说明（CLI 与 MCP）
+
+本工具为本地单用户案件工作台。Agent 通过两条通道调用同一业务服务：CLI（JSON 输出）与 MCP（stdio）。两条通道都不提供删除原件、执行任意 SQL 或覆盖恢复备份的能力。
+
+## 前置
+
+1. 首次按 README 安装并运行 `scripts/lwb init`。日常双击 `法律工作台.app` 或运行 `scripts/lwb start` 启动数据库与服务。
+2. 需要索引材料时运行 worker：`backend/.venv/bin/python -m legal_workbench.worker --once`，或在长驻终端运行 `--once` 省略版本。
+3. 服务器路径导入须在 `.env` 的 `LWB_IMPORT_ROOTS` 中显式列出允许目录（系统路径分隔符分隔）；未配置时一切服务器路径导入都会被拒绝。
+
+## CLI
+
+本机 Codex、Hermes 和 WorkBuddy 可使用 `legal-workbench-cli` 技能调用同一个 CLI。在对话中说「用 legal-workbench-cli 检查法律工作台是否连通，只返回验证结果」。连通性检查用 `list-cases --limit 0`，不返回案件条目。
+
+```sh
+cd backend
+.venv/bin/python -m legal_workbench.cli <command> [options]
+```
+
+- stdout 只有一行 JSON；日志与错误写 stderr。
+- 成功退出码 0；业务错误退出码 2（stderr 为 `{code, message, details}`）；未预期错误退出码 1。
+- 所有案件操作必须显式传 `--case-id`，没有"当前案件"。
+
+常用子命令：
+
+| 目的 | 命令 |
+|---|---|
+| 建案 | `create-case --title "…"` |
+| 列案 | `list-cases --limit 20` |
+| 导入 | `import --case-id ID --source-path /abs/dir --source-label L --request-key K` |
+| 列材料 | `list-materials --case-id ID` |
+| 改分类 | `update-classification --case-id ID --material-id M --category C --expected-revision R` |
+| 检索 | `search --case-id ID --query 合同 --mode literal` |
+| 金额检索 | `search --case-id ID --query 100 --mode amount --currency CNY` |
+| 读来源 | `read-source --case-id ID --source-ref REF --context-chars 200` |
+| 存分析 | `save-analysis --case-id ID --title T (--content 'Markdown 正文' \| --content-file path.md) --statement-kind agent_analysis --source-ref REF` |
+| 任务状态 | `job-status --case-id ID --job-id J` |
+| 跑队列 | `run-worker` |
+
+`--request-key` 是幂等键：同一键重复导入返回同一 `intake_id` 与 `job_id`，不会新建批次。要新批次就换新键。
+
+## MCP
+
+```sh
+cd backend
+.venv/bin/python -m legal_workbench.mcp_server
+```
+
+stdio 传输；stdout 仅协议数据，日志走 stderr。客户端配置示例（Claude Desktop / Codex 等 `mcpServers` 条目）：
+
+```json
+{
+  "mcpServers": {
+    "legal-workbench": {
+      "command": "/path/to/legal-workbench/backend/.venv/bin/python",
+      "args": ["-m", "legal_workbench.mcp_server"],
+      "cwd": "/path/to/legal-workbench/backend",
+      "env": { "PYTHONPATH": "/path/to/legal-workbench/backend/src" }
+    }
+  }
+}
+```
+
+暴露的工具：`create_case`、`list_cases`、`import_materials`、`list_materials`、`update_classification`、`create_working_copy`、`register_file_version`、`search_case`、`read_source`、`get_job_status`、`get_index_status`、`save_analysis`、`review_analysis`、`get_analysis_version`。
+
+进度工具（P3）：`get_progress`、`get_progress_rules`、`progress_add_node`、`progress_update_node`、`progress_set_active_stage`、`progress_move_node`、`progress_insert_fragment`、`progress_remove_node`、`progress_add_relation`、`progress_link_material`。**不提供确认与撤回**——Agent 的进度修改默认待确认，由承办人在网页确认或撤回。`progress_add_node` 必须带 `request_key`（幂等）。CLI 对应子命令：`progress`、`progress-rules`、`progress-add-node`、`progress-set-active-stage`、`progress-insert-fragment`。
+
+失败时返回结构化错误（`isError: true`，正文含错误码），不会把失败伪装成成功文本。
+
+标注工具为 `annotate_file` 和 `list_annotations`。登记时提供同案 `case_id`、固定的 `file_version_id`、`kind`（`transcription` 或 `interpretation`）和 `body`。对 PDF 可指定从 1 开始的 `page`。Agent 标注默认待人工复核，`reviewed_text` 为空。承办人在网页对照原件并确认或修订，原标注仍保留。后续重新识别可登记一条待复核记录。
+
+## 引用纪律
+
+- `source_ref` 是不透明 UUID，指向不可变片段；解析成功只证明定位存在，不证明观点正确。
+- 保存分析时把用到的 `source_ref` 全部列入 `source_refs`；跨案引用会被拒绝（`case_mismatch`）。
+- 检索命中的 `match_start`/`match_end` 是相对 `context` 的 Unicode 码点偏移；用 JavaScript 时须先转换，不能直接 `slice`。
+
+## 并发与冲突
+
+材料、分析、工作副本都带 `revision`。写入须带 `expected_revision`；过期返回 `conflict`（HTTP 409 / CLI 退出码 2），此时重新读取最新 revision 再提交，不要盲目重试同一数值。
+
+## 关系图、证据目录与诉请金额
+
+CLI 用 `graph --case-id <UUID>`、`evidence-catalog --case-id <UUID>` 和 `claims --case-id <UUID>` 读取工作区。`claim-candidates` 只返回本案可追溯的金额候选。查阅 `--help` 获得字段及命令一览。MCP 提供同一服务层的读取和提案入口。
+
+新增或更新时按命令携带幂等键和当前修订号。诉请金额使用整数分，币种与分组一致。Agent 写入以待确认提案留痕，确认与撤回由人员在工作台完成。引用遵守上文的 `source_ref` 规则。
+
+## 图表对外审计包与外部 Skill 模板
+
+- **只读审计包（CLI 与 MCP）**：
+  - CLI 子命令：`export-chart-audit-bundle --case-id <UUID> --chart-type graph|claims --target-id <UUID> --profile client|court [--snapshot-id <UUID>]`
+  - MCP 工具：`export_chart_audit_bundle`（注册工具名 `export-chart-audit-bundle`，参数同上）
+  - 该入口严格只读并校验 `case_id` 归属（跨案拒绝），返回对应图/诉请组的对外断言（已排除待定提案、`ruled_out` 与内部备注）、最新正式证据编号、`segment_id` 原文上下文及程序硬门禁 `preflight` 结果；Agent 不得跳过硬门禁豁免逻辑。
+- **配套外部 Skill 模板**：
+  - [chart-substantive-review](skills/chart-substantive-review/SKILL.md)：约定 4 步实质复核 SOP，消费 `export-chart-audit-bundle` 检查文图字面/金额/日期一致性、证明力越界与口径自认预警，结论交承办人终审。
+  - [nonstandard-table-script-sop](skills/nonstandard-table-script-sop/SKILL.md)：遇到多表头/非标银行流水时，约定外部 Agent 先读取前 20 行样本，编写使用 `Decimal` 转分的透明本地 Python 聚合脚本计算汇总与 `skipped_rows`，再经 `save-analysis` 留痕并按幂等键写入工作台待确认提案。

@@ -1,0 +1,29 @@
+[project]
+name = "legal-workbench"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "alembic==1.16.1",
+  "fastapi==0.115.12",
+  "httpx>=0.28.1",
+  "mcp>=1.30.0",
+  "openpyxl>=3.1.5",
+  "pillow>=13.0.0",
+  "psycopg[binary]==3.2.9",
+  "pydantic==2.11.5",
+  "pypdfium2>=5.15.2",
+  "python-docx>=1.2.0",
+  "rapidocr-onnxruntime>=1.4.4",
+  "sqlalchemy==2.0.41",
+  "uvicorn==0.34.3",
+]
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest==8.4.1",
+    "reportlab>=5.1.0",
+]

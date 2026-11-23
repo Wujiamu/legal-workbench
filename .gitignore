@@ -1,0 +1,62 @@
+# 凭据与本地状态：绝不入库
+.env
+.env.*
+!.env.example
+var/
+*.pgpass
+pgpass
+
+# 数据库卷与备份（可能含真实案件内容）
+*.dump
+*.sql
+*.tar.gz
+backup/
+backups/
+*.backup
+
+# OCR 模型（体积大，由 install_ocr_models.py 安装）
+var/models/
+*.onnx
+
+# 日志
+*.log
+logs/
+
+# Python
+backend/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# 前端
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.vite/
+
+# 本机验收证据、历史规则备份与设计访谈临时产物（不随开源仓库发布）
+.impeccable/
+docs/backups/
+docs/reports/
+
+# 测试与验收临时产物
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+/tmp-corpus/
+corpus/
+
+# 编辑器与系统垃圾
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp

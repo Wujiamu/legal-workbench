@@ -1,0 +1,122 @@
+"""Launch the local service once, then open it in the default browser."""
+from datetime import datetime
+import fcntl
+from pathlib import Path
+import subprocess
+import sys
+import time
+from urllib.error import URLError
+from urllib.request import ProxyHandler, build_opener
+
+from legal_workbench.config import load_settings
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNTIME = ROOT / "var" / "runtime"
+LOG = RUNTIME / "launcher.log"
+
+
+def log(message):
+    with LOG.open("a", encoding="utf-8") as output:
+        print(f"{datetime.now().astimezone().isoformat(timespec='seconds')} {message}",
+              file=output)
+
+
+def open_workbench(
+    *,
+    probe_fn=None,
+    run_fn=None,
+    popen_fn=None,
+    open_browser_fn=None,
+    sleep_fn=None,
+    monotonic_fn=None,
+):
+    settings = load_settings()
+    if not (ROOT / "frontend/dist/index.html").is_file():
+        raise RuntimeError("网页文件尚未构建，请按 README 完成安装。")
+    RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    base = f"http://127.0.0.1:{settings.port}"
+    local = build_opener(ProxyHandler({}))
+
+    def _default_probe():
+        """A live HTTP process is not ready until it can read from the database."""
+        try:
+            with local.open(base + "/api/v1/health", timeout=1) as response:
+                if response.read(128) != b'{"app":"legal-workbench"}':
+                    return False, False
+        except (URLError, TimeoutError):
+            return False, False
+        try:
+            with local.open(base + "/api/v1/cases?limit=1", timeout=2) as response:
+                return True, response.status == 200
+        except (URLError, TimeoutError):
+            return True, False
+
+    probe = probe_fn or _default_probe
+    run_cmd = run_fn or subprocess.run
+    popen_cmd = popen_fn or subprocess.Popen
+    open_browser = open_browser_fn or (
+        lambda url: subprocess.run(["/usr/bin/open", url], check=True)
+    )
+    sleep = sleep_fn or time.sleep
+    monotonic = monotonic_fn or time.monotonic
+
+    with (RUNTIME / "launcher.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        running, ready = probe()
+        service_process = None
+        recovered_db = False
+        if not running:
+            log("正在启动工作台服务")
+            with LOG.open("ab") as output:
+                service_process = popen_cmd(
+                    [sys.executable, str(ROOT / "scripts/lwb"), "start"],
+                    cwd=ROOT, stdin=subprocess.DEVNULL, stdout=output,
+                    stderr=subprocess.STDOUT, start_new_session=True)
+        elif not ready:
+            log("发现已运行的工作台服务但数据库未就绪，尝试拉起 PostgreSQL 并恢复解析 worker")
+            with LOG.open("ab") as output:
+                db_result = run_cmd(
+                    [sys.executable, str(ROOT / "scripts/lwb"), "start-db"],
+                    cwd=ROOT, stdin=subprocess.DEVNULL, stdout=output,
+                    stderr=subprocess.STDOUT, check=False)
+            if db_result.returncode != 0:
+                raise RuntimeError("数据库未就绪，自动拉起 PostgreSQL 失败，请检查启动日志。")
+            recovered_db = True
+            with LOG.open("ab") as output:
+                popen_cmd(
+                    [sys.executable, str(ROOT / "scripts/lwb"), "worker"],
+                    cwd=ROOT, stdin=subprocess.DEVNULL, stdout=output,
+                    stderr=subprocess.STDOUT, start_new_session=True)
+        else:
+            log("发现已运行的工作台服务")
+        deadline = monotonic() + 45
+        while not ready:
+            if service_process is not None and service_process.poll() is not None:
+                raise RuntimeError("服务启动失败。")
+            if monotonic() >= deadline:
+                raise RuntimeError("数据库未就绪，无法读取案件列表。" if running
+                                   else "工作台服务未能及时启动。")
+            sleep(0.25 if (service_process is not None or recovered_db) else 1)
+            running, ready = probe()
+    open_browser(base + "/")
+    log(f"已确认案件列表可读并打开 {base}/")
+
+
+if __name__ == "__main__":
+    try:
+        open_workbench()
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
+        try:
+            log(f"启动失败：{exc}")
+        except OSError:
+            pass
+        message = f"{exc}\n\n启动日志：{LOG}"
+        try:
+            subprocess.run(
+                ["/usr/bin/osascript", "-e", "on run argv", "-e",
+                 'display alert "无法启动法律工作台" message (item 1 of argv) as critical',
+                 "-e", "end run", message],
+                check=True, capture_output=True, timeout=10)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            subprocess.run(["/usr/bin/open", "-t", str(LOG)], check=False)
+        sys.exit(1)

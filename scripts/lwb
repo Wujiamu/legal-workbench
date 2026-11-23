@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""Explicit local lifecycle commands, without an operating-system service."""
+import os
+from pathlib import Path
+import secrets
+import signal
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+DATA = ROOT / "var" / "postgres"
+RUNTIME = ROOT / "var" / "runtime"
+ENV_FILE = ROOT / ".env"
+PG_BIN = Path(os.environ.get("LWB_PG_BIN", "/opt/homebrew/opt/postgresql@18/bin"))
+SUPERUSER = "lwb_super"
+MIGRATOR = "lwb_migrator"
+APP = "lwb_app"
+DATABASE = "legal_workbench"
+
+
+def run(args, **kwargs):
+    # PostgreSQL 18 on macOS aborts startup when the postmaster becomes
+    # multithreaded under an unset/invalid locale; force a stable one.
+    env = kwargs.pop("env", None) or dict(os.environ)
+    env.setdefault("LC_ALL", "en_US.UTF-8")
+    return subprocess.run([str(x) for x in args], check=True, env=env, **kwargs)
+
+
+def private_file(path, text):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+
+
+def initialize():
+    if ENV_FILE.exists() or DATA.exists():
+        raise RuntimeError(".env or database directory already exists; refusing to overwrite")
+    RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    (ROOT / "var/data").mkdir(parents=True, exist_ok=True)
+    super_pw, migrator_pw, app_pw = (secrets.token_urlsafe(32) for _ in range(3))
+    pwfile = RUNTIME / "init-password"
+    private_file(pwfile, super_pw + "\n")
+    try:
+        run([PG_BIN / "initdb", "-D", DATA, "-U", SUPERUSER, "--auth=scram-sha-256",
+             "--pwfile", pwfile, "--encoding=UTF8"])
+    finally:
+        pwfile.unlink(missing_ok=True)
+    with (DATA / "postgresql.conf").open("a") as f:
+        f.write("\nlisten_addresses = '127.0.0.1'\nport = 55432\n")
+    private_file(
+        RUNTIME / "pgpass",
+        f"127.0.0.1:55432:*:{SUPERUSER}:{super_pw}\n"
+        f"127.0.0.1:55432:*:{MIGRATOR}:{migrator_pw}\n"
+        f"127.0.0.1:55432:*:{APP}:{app_pw}\n",
+    )
+    start_db()
+    # Every client below must use the freshly initialised cluster.  Without this
+    # env, psql falls back to the default socket on 5432 and the roles land in
+    # whatever instance happens to be listening there — or the command fails and
+    # the new cluster is left running half-configured.
+    env = dict(os.environ, PGHOST="127.0.0.1", PGPORT="55432", PGUSER=SUPERUSER,
+               PGPASSFILE=str(RUNTIME / "pgpass"))
+    try:
+        # The migration role owns schema objects and may create test databases;
+        # the application role gets DML only (granted by migrations).
+        run([PG_BIN / "psql", "-v", "ON_ERROR_STOP=1", "-d", "postgres", "-c",
+             f"CREATE ROLE {MIGRATOR} LOGIN CREATEDB PASSWORD '{migrator_pw}'"], env=env)
+        run([PG_BIN / "psql", "-v", "ON_ERROR_STOP=1", "-d", "postgres", "-c",
+             f"CREATE ROLE {APP} LOGIN PASSWORD '{app_pw}'"], env=env)
+        run([PG_BIN / "createdb", "-O", MIGRATOR, DATABASE], env=env)
+    except BaseException:
+        # Leave no half-initialised cluster behind for the next `init` to trip on.
+        subprocess.run([str(PG_BIN / "pg_ctl"), "-D", str(DATA), "-w", "-m", "fast", "stop"],
+                       env=dict(os.environ, LC_ALL="en_US.UTF-8"), capture_output=True)
+        raise
+    private_file(
+        ENV_FILE,
+        f"LWB_DATABASE_URL=postgresql://{APP}:{app_pw}@127.0.0.1:55432/{DATABASE}\n"
+        f"LWB_MIGRATION_URL=postgresql://{MIGRATOR}:{migrator_pw}@127.0.0.1:55432/{DATABASE}\n"
+    )
+    # One command has to leave a working installation: roles, database, config,
+    # schema and a running service.  Stopping after the roles and telling the
+    # user to run two more commands is where a fresh install was left half done.
+    print("角色与数据库已创建，凭据写入 .env（权限 0600）。开始迁移并启动。")
+    try:
+        migrate()
+    except BaseException:
+        subprocess.run([str(PG_BIN / "pg_ctl"), "-D", str(DATA), "-w", "-m", "fast", "stop"],
+                       env=dict(os.environ, LC_ALL="en_US.UTF-8"), capture_output=True)
+        raise
+    return start()
+
+
+def start_db():
+    env = dict(os.environ)
+    env.setdefault("LC_ALL", "en_US.UTF-8")
+    status = subprocess.run([str(PG_BIN / "pg_ctl"), "-D", str(DATA), "status"],
+                            capture_output=True, env=env)
+    if status.returncode == 0:
+        return
+    run([PG_BIN / "pg_ctl", "-D", DATA, "-l", RUNTIME / "postgres.log", "-w", "start"])
+
+
+def migrate():
+    os.chdir(ROOT / "backend")
+    run(["uv", "run", "--locked", "--no-sync", "alembic", "upgrade", "head"])
+    # K14: instantiate default progress fragments for pre-existing cases (idempotent).
+    run(["uv", "run", "--locked", "--no-sync", "python", "-m", "legal_workbench.backfill_progress"])
+
+
+def start():
+    """Start PostgreSQL, apply migrations, then run the API and one worker.
+
+    The worker is a separate process, not a thread inside the web app: a parsing
+    crash must never take the API down, and the single-worker advisory lock only
+    works across processes.  The web server runs as a child rather than via exec
+    so this process survives to stop the worker when the server exits.
+    """
+    sys.path.insert(0, str(ROOT / "backend/src"))
+    from legal_workbench.config import load_settings
+    settings = load_settings()
+    if settings.host != "127.0.0.1":
+        raise RuntimeError("LWB_HOST must be 127.0.0.1")
+    start_db()
+    migrate()
+    os.chdir(ROOT / "backend")
+    env = dict(os.environ, LC_ALL=os.environ.get("LC_ALL", "en_US.UTF-8"))
+    children = []
+
+    def stop_children(*_signal):
+        # Ctrl-C reaches the whole process group, but a plain SIGTERM to this
+        # script does not: without this handler the worker and uvicorn survive
+        # as orphans holding the port and the worker lock.
+        for child in children:
+            if child.poll() is None:
+                child.terminate()
+        for child in children:
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                child.kill()
+
+    previous = signal.signal(signal.SIGTERM, stop_children)
+    try:
+        worker = subprocess.Popen(
+            ["uv", "run", "--locked", "--no-sync", "python", "-m", "legal_workbench.worker"],
+            env=env)
+        children.append(worker)
+        server = subprocess.Popen(
+            ["uv", "run", "--locked", "--no-sync", "uvicorn", "legal_workbench.app:app",
+             "--host", settings.host, "--port", str(settings.port), "--no-access-log"],
+            env=env)
+        children.append(server)
+        return server.wait()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        stop_children()
+        signal.signal(signal.SIGTERM, previous)
+
+
+def main():
+    if len(sys.argv) != 2 or sys.argv[1] not in ("init", "start", "start-db", "stop", "doctor", "migrate", "worker"):
+        print("用法: scripts/lwb {init|migrate|start|start-db|stop|worker|doctor}", file=sys.stderr)
+        return 2
+    os.chdir(ROOT)
+    command = sys.argv[1]
+    if command == "init":
+        return initialize() or 0
+    elif command == "migrate":
+        start_db()
+        migrate()
+    elif command == "start":
+        return start()
+    elif command == "start-db":
+        start_db()
+    elif command == "worker":
+        os.chdir(ROOT / "backend")
+        os.execvp("uv", ["uv", "run", "--locked", "--no-sync", "python", "-m",
+                         "legal_workbench.worker"])
+    elif command == "stop":
+        run([PG_BIN / "pg_ctl", "-D", DATA, "-w", "stop", "-m", "fast"])
+    else:
+        os.chdir(ROOT / "backend")
+        os.execvp("uv", ["uv", "run", "--locked", "--no-sync", "python", "-m", "legal_workbench.doctor"])
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+        print(f"操作失败: {type(exc).__name__}; 请检查本地配置及 PostgreSQL 状态。", file=sys.stderr)
+        raise SystemExit(1)

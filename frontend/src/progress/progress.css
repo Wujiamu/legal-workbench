@@ -1,0 +1,142 @@
+/* 办案进度原型样式：复用 workbench.css 的 CSS 自定义属性。 */
+.progress-main { padding: clamp(20px, 4vw, 48px) clamp(16px, 4vw, 56px); max-width: 1560px; margin: 0 auto; }
+.progress-prototype .page-heading h1 { font-size: clamp(20px, 2.6vw, 30px); }
+.progress-view-switch { display: flex; gap: 6px; }
+.progress-view-switch button {
+  font: inherit; font-size: 14px; padding: 8px 14px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted);
+}
+.progress-view-switch button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 650; }
+.progress-demo {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+  border: 1px dashed var(--line); border-radius: 10px; background: var(--warm);
+  padding: 12px 16px; margin-bottom: 16px; font-size: 13px;
+}
+.progress-demo label { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.progress-demo select, .progress-demo button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 5px; border: 1px solid #a7b5aa; background: var(--surface); color: var(--ink); }
+.progress-demo button { cursor: pointer; }
+.progress-notice { display: flex; gap: 10px; align-items: center; background: var(--warm); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.progress-notice button, .progress-error button { font: inherit; font-size: 12px; cursor: pointer; border: 1px solid #a7b5aa; background: var(--surface); border-radius: 4px; padding: 2px 8px; }
+.progress-error { color: #8c2f2f; background: #fbeaea; border: 1px solid #d8b4b4; border-radius: 8px; padding: 8px 12px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.progress-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.progress-view { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 14px 16px; min-width: 0; }
+.progress-aside { position: sticky; top: 16px; }
+.progress-outline-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.progress-outline-toolbar button, .progress-add summary {
+  font: inherit; font-size: 13px; cursor: pointer; padding: 5px 10px;
+  border: 1px solid #a7b5aa; border-radius: 5px; background: var(--surface); color: var(--ink);
+}
+.progress-add { position: relative; display: inline-block; }
+.progress-add summary { list-style: none; }
+.progress-add summary::-webkit-details-marker { display: none; }
+.progress-add ul {
+  position: absolute; z-index: 30; margin: 4px 0 0; padding: 4px; list-style: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 6px 18px rgb(20 30 25 / 14%); min-width: 110px;
+}
+.progress-add li button { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 6px 10px; border: 0; background: none; cursor: pointer; border-radius: 5px; }
+.progress-add li button:hover { background: #eef3ef; }
+.h-tree { display: flex; align-items: flex-start; gap: 40px; overflow-x: auto; padding: 14px 4px 18px; }
+.h-node { display: flex; align-items: center; }
+.h-node-main { position: relative; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.h-node-links { display: flex; flex-wrap: wrap; gap: 4px; }
+.node-btn { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; max-width: 240px; min-width: 120px; text-align: left; font: inherit; font-size: 12px; padding: 8px 12px; background: var(--surface); border: 1px solid #a7b5aa; border-radius: 8px; cursor: pointer; box-shadow: 0 1px 4px rgb(20 30 25 / 10%); color: var(--ink); }
+.node-btn:hover { border-color: var(--accent); }
+.node-btn.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+.h-children { display: flex; flex-direction: column; gap: 18px; margin-left: 24px; padding-left: 24px; border-left: 1px solid var(--line); }
+.h-children > .h-node { position: relative; }
+.h-children > .h-node::before { content: ''; position: absolute; left: -24px; top: 50%; width: 24px; height: 1px; background: var(--line); }
+.node-collapse {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex-shrink: 0; cursor: pointer;
+  font-size: 15px; line-height: 1; color: var(--ink);
+  background: #edf1ec; border: 1px solid #a7b5aa; border-radius: 6px;
+}
+.node-collapse:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.edge-plus { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; line-height: 20px; text-align: center; cursor: pointer; box-shadow: 0 1px 4px rgb(20 30 25 / .3); z-index: 5; }
+.edge-top { top: -10px; left: calc(50% - 10px); }
+.edge-bottom { bottom: -10px; left: calc(50% - 10px); }
+.edge-left { left: -10px; top: calc(50% - 10px); }
+.edge-right { right: -10px; top: calc(50% - 10px); }
+.ctx-menu { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(20 30 25 / 18%); padding: 4px; min-width: 150px; display: flex; flex-direction: column; }
+.ctx-item { font: inherit; font-size: 13px; text-align: left; padding: 7px 12px; border: 0; background: none; cursor: pointer; border-radius: 5px; color: var(--ink); }
+.ctx-item:hover:not(:disabled) { background: #eef3ef; }
+.ctx-item:disabled { color: var(--muted); cursor: default; }
+.ctx-item.danger { color: #8c2f2f; }
+.ctx-sep { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
+.progress-kind { font-size: 11px; font-weight: 650; color: #44574d; background: #edf1ec; border-radius: 4px; padding: 1px 6px; flex-shrink: 0; }
+.progress-title { font-size: 14px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.progress-state { font-size: 12px; color: var(--muted); }
+.progress-state.state-in_progress { color: var(--accent); font-weight: 700; }
+.progress-state.state-completed, .progress-state.state-done { color: #44574d; }
+.progress-state.state-cancelled, .progress-state.state-skipped { text-decoration: line-through; }
+.progress-dates { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.progress-pending { font-size: 11px; font-weight: 700; color: #8a5a00; background: #fdf3df; border: 1px solid #e4cf9f; border-radius: 4px; padding: 1px 6px; }
+.progress-agent { font-size: 11px; color: #8a5a00; }
+.progress-link { font-size: 11px; color: var(--muted); background: #f2f4f0; border-radius: 4px; padding: 1px 6px; }
+.progress-link-remove { font: inherit; font-size: 11px; line-height: 1.4; cursor: pointer; border: 1px solid #d8b4b4; background: #f2f4f0; color: #8c2f2f; border-radius: 4px; padding: 1px 6px; }
+.progress-link-remove:hover { color: #b03030; border-color: #b03030; }
+.progress-relations { margin-top: 10px; font-size: 12px; }
+.progress-relations summary { cursor: pointer; color: var(--muted); }
+.progress-relations ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.progress-relations li { display: flex; align-items: center; gap: 8px; }
+.progress-relations li button { font: inherit; font-size: 11px; cursor: pointer; border: 1px solid #d8b4b4; background: var(--surface); color: #8c2f2f; border-radius: 4px; padding: 1px 8px; }
+.progress-selected-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+.progress-selected-actions button { font: inherit; font-size: 13px; cursor: pointer; border: 1px solid #a7b5aa; background: var(--surface); border-radius: 5px; padding: 4px 10px; }
+.progress-collapse-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: 12px; }
+.progress-collapse-tools button { font: inherit; font-size: 12px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 4px; padding: 3px 10px; }
+.progress-collapse-tools button:hover { color: var(--ink); border-color: #a7b5aa; }
+.progress-toggle { position: relative; z-index: 5; width: 22px; height: 22px; flex-shrink: 0; font-size: 12px; line-height: 1; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 4px; padding: 0; }
+.progress-toggle:hover { color: var(--ink); border-color: #a7b5aa; }
+.progress-collapsed-count { font-size: 11px; font-weight: 650; color: #44574d; background: #edf1ec; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+.progress-graph { height: max(460px, calc(100vh - 300px)); border-radius: 8px; overflow: hidden; position: relative; }
+.graph-error { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 10; margin: 0; }
+.edge-plus-sensor { position: absolute; inset: 0; z-index: 4; }
+.progress-group header { position: relative; }
+.progress-card { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; background: var(--surface); border: 1px solid #a7b5aa; border-radius: 8px; padding: 8px 12px; font-size: 12px; box-shadow: 0 1px 4px rgb(20 30 25 / 10%); box-sizing: border-box; }
+.progress-card.selected, .progress-group.selected { outline: 2px solid var(--accent); }
+.progress-group { width: 100%; height: 100%; background: #f6f8f4; border: 1px solid var(--line); border-radius: 10px; }
+.progress-group header { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 7px 12px; font-size: 12px; border-bottom: 1px solid var(--line); background: #edf1ec; border-radius: 10px 10px 0 0; }
+.progress-review { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 14px 16px; }
+.progress-review h2 { margin: 0 0 10px; font-size: 15px; color: var(--ink); }
+.progress-review-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.progress-review-item { border: 1px solid #e4cf9f; background: #fffaf0; border-radius: 8px; padding: 10px 12px; }
+.progress-review-item header { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 13px; }
+.progress-diff { margin: 8px 0; padding-inline-start: 18px; font-size: 12px; color: var(--ink); display: grid; gap: 3px; }
+.progress-review-item .work-actions { margin-top: 8px; }
+.progress-review-item .work-actions button { font: inherit; font-size: 13px; cursor: pointer; border: 1px solid #a7b5aa; background: var(--surface); border-radius: 5px; padding: 4px 12px; }
+.progress-editor-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.progress-loading { padding: 32px; color: var(--muted); }
+@media (max-width: 900px) {
+  .progress-layout { grid-template-columns: 1fr; }
+  .progress-aside { position: static; }
+  .progress-graph { height: 420px; }
+}
+/* Agent 徽标：小框只写 Agent，颜色表认可状态（用户反馈第七轮） */
+.agent-badge {
+  display: inline-block; padding: 0 6px; border-radius: 4px;
+  font-size: 11px; line-height: 18px; border: 1px solid transparent;
+}
+.agent-badge.agent-pending { background: #fff3cd; color: #7a5b00; border-color: #e0c060; }
+.agent-badge.agent-accepted { background: #d9f2e3; color: #1c6b3c; border-color: #7cc79a; }
+
+/* 撤销焦点区域高亮 */
+.zone-focused { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; border-radius: 6px; }
+
+/* 确认面板头部与工时面板 */
+.progress-review-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+/* 工时改为按钮触发弹窗（用户反馈第十轮），不再常驻侧栏 */
+.time-open-btn { font: inherit; font-size: 14px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.time-open-btn:hover { border-color: var(--accent); color: var(--accent); }
+.time-dialog { width: min(560px, 92vw); max-height: 86vh; overflow: auto; }
+.time-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.time-dialog-head h2 { margin: 0; font-size: 17px; }
+.time-dialog-head button { font: inherit; font-size: 13px; cursor: pointer; border: 1px solid #a7b5aa; background: var(--surface); border-radius: 5px; padding: 4px 12px; }
+.progress-time { margin-top: 4px; }
+.progress-time .progress-review-head h2 { display: none; }
+.time-start-row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin: 8px 0; }
+.time-running { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
+.time-running li { border: 1px solid var(--border, #d8d8d8); border-radius: 6px; padding: 8px; }
+.time-manual { margin-top: 8px; }
+.time-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.time-table th, .time-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border, #e4e4e4); }
