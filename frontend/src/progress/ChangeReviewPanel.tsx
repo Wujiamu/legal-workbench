@@ -4,6 +4,7 @@
  */
 import { useState } from 'react';
 import { kindLabel, relationLabel, stateLabel } from './rules';
+import { undoShortcutLabel } from '../ui/shortcuts';
 import type {
   ChangeDiffEntry, CommandResult, ProgressChange, ProgressCommand,
   ProgressNode, ProgressRules, ProgressSnapshot,
@@ -122,7 +123,7 @@ export function ChangeReviewPanel({ snapshot, rules, readOnly = false, onCommand
         <h2>Agent 待确认修改</h2>
         <div className="work-actions">
           {undoDepth && undoDepth > 0 && !readOnly ? (
-            <button type="button" onClick={onUndo} title="撤销本区域最近一步（⌘Z）">撤销（{undoDepth}）</button>
+            <button type="button" onClick={onUndo} title={`撤销本区域最近一步（${undoShortcutLabel()}）`}>撤销（{undoDepth}）</button>
           ) : null}
           {snapshot.pending_changes.length > 0 ? (
             <button type="button" disabled={readOnly} onClick={openConfirmAll}>一键全部确认</button>

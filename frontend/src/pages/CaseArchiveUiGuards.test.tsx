@@ -2,7 +2,8 @@
  * 归档只读界面入口回归：已归档案件的「导入材料」按钮禁用且不展开上传面板。
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../api/endpoints', async () => {
@@ -61,8 +62,49 @@ describe('CaseWorkspacePage 归档只读 UI 守卫', () => {
 
     const importBtn = await screen.findByRole('button', { name: '导入材料' }) as HTMLButtonElement;
     await waitFor(() => expect(importBtn.disabled).toBe(true));
+    expect(screen.getByRole('status').textContent).toContain('本案已归档');
+    expect(screen.getByRole('navigation', { name: '案件工作区' }).textContent).toContain('办案进度');
     expect(screen.queryByRole('region', { name: /上传/ })).toBeNull();
     expect(screen.queryByText(/选择文件/)).toBeNull();
+  });
+
+  it('工作区页签切换同步写入 URL ?view=，刷新/返回不丢失所在页签', async () => {
+    vi.mocked(casesApi.overview).mockResolvedValue({
+      case_id: 'case-arch-1',
+      title: 'TEST-ONLY 在办工作区测试',
+      description: null,
+      stage: null,
+      active_stage: null,
+      next_action: null,
+      deadlines: [],
+      revision: 0,
+      archived_at: null,
+      created_at: '2026-11-20T00:00:00Z',
+    });
+    vi.mocked(materialsApi.list).mockResolvedValue({
+      items: [], offset: 0, limit: 50, total: 0, case_total: 0, categories: [],
+    });
+    vi.mocked(searchApi.indexStatus).mockResolvedValue({
+      complete: 0, partial: 0, failed: 0, pending: 0, unsupported: 0,
+    });
+
+    function LocationProbe() {
+      const location = useLocation();
+      return <output data-testid="loc-search">{location.search}</output>;
+    }
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/cases/case-arch-1']}>
+        <CaseWorkspacePage />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: '案件概览' }));
+    expect(screen.getByTestId('loc-search').textContent).toBe('?view=overview');
+    await user.click(screen.getByRole('button', { name: '分析' }));
+    expect(screen.getByTestId('loc-search').textContent).toBe('?view=analysis');
   });
 
   it('M1：已归档时同步禁用材料详情、标注复核、分析、保存分析与案件概览写入入口', async () => {

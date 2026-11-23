@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { describeError } from '../api/client';
 import { casesApi, searchApi } from '../api/endpoints';
+import { CaseNavBar } from '../components/CaseNavBar';
 import { SourcePreview } from '../components/SourcePreview';
 import { ClaimsPanel } from './ClaimsPanel';
 import { candidateSearch, createHttpClaimSource } from './httpExecutor';
@@ -97,8 +98,9 @@ function CaseClaims({ caseId }: { caseId: string }) {
       <header className="app-bar"><div className="app-bar-inner">
         <span className="app-brand">法律工作台</span>
         <span className="app-section">诉请金额</span>
-        <Link to={`/cases/${caseId}`}>← 案件工作区</Link>
+        <Link to="/">← 案件工作表</Link>
       </div></header>
+      <CaseNavBar caseId={caseId} active="claims" />
       <main className="claims-main">
         <div className="page-heading">
           <div>

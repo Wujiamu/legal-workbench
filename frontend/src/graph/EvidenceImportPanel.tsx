@@ -81,7 +81,7 @@ export function EvidenceImportPanel({ caseId, ws, readOnly, onImported }: {
   }
 
   async function submit() {
-    if (!importMaterialId) { setError('提交前必须选定本案的导入材料（import_material_id）。'); return; }
+    if (!importMaterialId) { setError('提交前请先选择本案已上传的目录文件。'); return; }
     if (rows.length === 0) { setError('尚未解析出待导入的目录行。'); return; }
     const unmapped = rows.filter((row) => !row.material_id).length;
     setBusy(true);
@@ -125,7 +125,7 @@ export function EvidenceImportPanel({ caseId, ws, readOnly, onImported }: {
       ) : (
         <>
           <div className="graph-form-row">
-            <label>导入材料（import_material_id）
+            <label>导入材料
               <select value={importMaterialId} disabled={busy}
                 onChange={(event) => setImportMaterialId(event.target.value)}>
                 <option value="">选择已上传的目录文件…</option>

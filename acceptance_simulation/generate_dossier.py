@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 from decimal import Decimal
 import io
+import os
 from pathlib import Path
 import sys
 
@@ -18,14 +19,44 @@ from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 ROOT = Path(__file__).resolve().parent
 DOSSIER = ROOT / "dossier"
 
-SONGTI_FONT = "/System/Library/Fonts/Supplemental/Songti.ttc"
-HEITI_FONT = "/System/Library/Fonts/STHeiti Medium.ttc"
+_WIN_FONTS = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+_SONGTI_CANDIDATES = (
+    "/System/Library/Fonts/Supplemental/Songti.ttc",
+    str(_WIN_FONTS / "simsun.ttc"),
+    str(_WIN_FONTS / "msyh.ttc"),
+    "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
+)
+_HEITI_CANDIDATES = (
+    "/System/Library/Fonts/STHeiti Medium.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    str(_WIN_FONTS / "msyh.ttc"),
+    str(_WIN_FONTS / "simhei.ttf"),
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+)
+
+
+def _pick_font(candidates: tuple[str, ...]) -> str | None:
+    for item in candidates:
+        if Path(item).is_file():
+            return item
+    return None
+
+
+def _pil_font(candidates: tuple[str, ...], size: int):
+    font_path = _pick_font(candidates)
+    if font_path:
+        try:
+            return ImageFont.truetype(font_path, size)
+        except OSError:
+            pass
+    return ImageFont.load_default()
 
 USCC_CHARSET = "0123456789ABCDEFGHJKLMNPQRTUWXY"
 USCC_WEIGHTS = (1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28)
@@ -120,7 +151,14 @@ def write_docx_indictment(out_path: Path) -> None:
 
 def write_text_pdf_contract(out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    pdfmetrics.registerFont(TTFont("SongtiCN", SONGTI_FONT, subfontIndex=0))
+    font_path = _pick_font(_SONGTI_CANDIDATES)
+    if font_path:
+        kwargs = {"subfontIndex": 0} if font_path.lower().endswith(".ttc") else {}
+        pdfmetrics.registerFont(TTFont("SongtiCN", font_path, **kwargs))
+    else:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        pdfmetrics.registerFontFamily("SongtiCN", normal="STSong-Light")
+    pdf_font = "SongtiCN" if font_path else "STSong-Light"
 
     c = canvas.Canvas(str(out_path), pagesize=A4)
     width, height = A4
@@ -175,7 +213,7 @@ def write_text_pdf_contract(out_path: Path) -> None:
         y = height - 60
         for idx, line in enumerate(page_lines):
             font_size = 13 if idx == 1 else 10.5
-            c.setFont("SongtiCN", font_size)
+            c.setFont(pdf_font, font_size)
             c.drawString(48, y, line)
             y -= 24 if idx == 1 else 21
         c.showPage()
@@ -190,9 +228,9 @@ def _render_chinese_document_image(
 ) -> Image.Image:
     img = Image.new("RGB", size, (255, 255, 255))
     draw = ImageDraw.Draw(img)
-    title_font = ImageFont.truetype(HEITI_FONT, 44)
-    body_font = ImageFont.truetype(HEITI_FONT, 31)
-    small_font = ImageFont.truetype(HEITI_FONT, 25)
+    title_font = _pil_font(_HEITI_CANDIDATES, 44)
+    body_font = _pil_font(_HEITI_CANDIDATES, 31)
+    small_font = _pil_font(_HEITI_CANDIDATES, 25)
 
     draw.rectangle((48, 48, size[0] - 48, size[1] - 48), outline=(210, 210, 210), width=3)
     draw.text((88, 90), BANNER, fill=(110, 30, 30), font=small_font)

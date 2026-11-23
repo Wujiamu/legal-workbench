@@ -3,12 +3,16 @@ import { Link, useNavigate } from 'react-router';
 import { describeError } from '../api/client';
 import type { Page } from '../api/client';
 import { casesApi } from '../api/endpoints';
-import type { CaseOverview, DashboardDeadlinesOutput, Deadline } from '../api/endpoints';
+import type { CaseOverview, CaseSummary, DashboardDeadlinesOutput, Deadline } from '../api/endpoints';
 import { deadlineKind, DeadlineTimeline } from '../components/DeadlineTimeline';
 import { Button, EmptyState, ErrorState, LoadingState } from '../ui/primitives';
 import { shanghaiToday } from '../ui/time';
 
 const PAGE_SIZE = 50;
+type CaseRow = CaseSummary & Partial<Pick<
+  CaseOverview,
+  'stage' | 'next_action' | 'deadlines' | 'active_stage' | 'active_stages' | 'pending_work'
+>>;
 
 export { deadlineKind };
 
@@ -27,8 +31,9 @@ export function DeadlineLabel({ item, today = shanghaiToday() }: {
 export function CasesPage() {
   const navigate = useNavigate();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [page, setPage] = useState<Page<CaseOverview> | null>(null);
+  const [page, setPage] = useState<Page<CaseRow> | null>(null);
   const [offset, setOffset] = useState(0);
+  const [showArchived, setShowArchived] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState('');
   const [timeline, setTimeline] = useState<DashboardDeadlinesOutput | null>(null);
@@ -40,11 +45,14 @@ export function CasesPage() {
   useEffect(() => {
     const controller = new AbortController();
     setError('');
-    casesApi.dashboard(offset, PAGE_SIZE, controller.signal)
+    const request = showArchived
+      ? casesApi.list(offset, PAGE_SIZE, controller.signal, true)
+      : casesApi.dashboard(offset, PAGE_SIZE, controller.signal);
+    request
       .then((result) => { if (!controller.signal.aborted) setPage(result); })
       .catch((cause: unknown) => { if (!controller.signal.aborted) setError(describeError(cause)); });
     return () => controller.abort();
-  }, [offset, attempt]);
+  }, [offset, attempt, showArchived]);
 
   // 时间轴数据独立于案件表分页：接口返回全部未归档案件的期限，切换页码不重取。
   useEffect(() => {
@@ -82,28 +90,39 @@ export function CasesPage() {
       <div className="page-heading">
         <h1>案件工作表</h1>
         <div className="dashboard-actions">
-          <Link className="prototype-entry" to="/prototype/progress">办案进度原型 · 演示数据</Link>
-          <Link className="prototype-entry" to="/prototype/graph">主体关系图原型 · 演示数据</Link>
-          <Link className="prototype-entry" to="/prototype/claims">诉请金额原型 · 演示数据</Link>
+          <button
+            type="button"
+            className="archive-btn"
+            aria-pressed={showArchived}
+            onClick={() => {
+              setShowArchived((value) => !value);
+              setOffset(0);
+            }}
+          >
+            {showArchived ? '返回在办案件' : '查看已归档'}
+          </button>
           <Button onClick={() => {
             setTitle(''); setCreateError(''); dialog.current?.showModal();
           }}>＋ 新建案件</Button>
         </div>
       </div>
       {error ? <ErrorState message={error} onRetry={() => setAttempt((value) => value + 1)} /> : null}
-      {timelineError
-        ? <ErrorState message={timelineError} onRetry={() => setAttempt((value) => value + 1)} />
-        : timeline
-          ? <DeadlineTimeline items={timeline.items} today={timeline.as_of}
-                              caseTotal={timeline.case_total} />
-          : <LoadingState label="期限时间轴加载中…" />}
-      {page ? <section className="case-register" aria-label="案件列表">
+      {showArchived ? null : (
+        timelineError
+          ? <ErrorState message={timelineError} onRetry={() => setAttempt((value) => value + 1)} />
+          : timeline
+            ? <DeadlineTimeline items={timeline.items} today={timeline.as_of}
+                                caseTotal={timeline.case_total} />
+            : <LoadingState label="期限时间轴加载中…" />
+      )}
+      {page ? <section className="case-register" aria-label={showArchived ? '已归档案件列表' : '案件列表'}>
         <div className="table-scroll" tabIndex={0} aria-label="案件工作表">
           <table className="case-table">
             <thead><tr><th scope="col">案件</th><th scope="col">当前节点</th>
               <th scope="col">最近期限</th><th scope="col">下一步工作</th></tr></thead>
             <tbody>{page.items.map((item) => {
-              const next = item.deadlines.filter((entry) => !entry.completed)
+              const deadlinesList = item.deadlines ?? [];
+              const next = deadlinesList.filter((entry) => !entry.completed)
                 .sort((a, b) => a.due.localeCompare(b.due))[0];
               // P4：当前节点优先读进度树的所有进行中阶段（并行程序各一个）；旧 stage 仅作过渡回退。
               const activeStages = item.active_stages?.length ? item.active_stages : [];
@@ -111,10 +130,13 @@ export function CasesPage() {
                 ? activeStages.join('、')
                 : (item.active_stage ?? item.stage);
               return <tr key={item.case_id}>
-                <th scope="row"><Link to={`/cases/${item.case_id}?view=overview`}>{item.title}</Link></th>
-                <td>{currentNode || <span className="muted">待登记</span>}</td>
+                <th scope="row">
+                  <Link to={`/cases/${item.case_id}?view=overview`}>{item.title}</Link>
+                  {item.archived_at ? <small>已归档 {item.archived_at.slice(0, 10)}</small> : null}
+                </th>
+                <td>{currentNode || <span className="muted">{item.archived_at ? '已归档' : '待登记'}</span>}</td>
                 <td>{next ? <><DeadlineLabel item={next} today={today} /><div>{next.title}</div></>
-                  : <span className="muted">{item.deadlines.length ? '无未完成期限' : '待登记'}</span>}</td>
+                  : <span className="muted">{item.archived_at ? '只读' : deadlinesList.length ? '无未完成期限' : '待登记'}</span>}</td>
                 <td>
                   <Link to={`/cases/${item.case_id}/progress`}>办案进度</Link>
                   {(item.pending_work?.length ?? 0) > 0
@@ -125,8 +147,12 @@ export function CasesPage() {
             })}</tbody>
           </table>
         </div>
-        {page.items.length === 0 ? <EmptyState title="还没有案件" detail="新建案件后，可以登记办案节点和期限。" /> : null}
-        <footer className="table-footer"><span>共 {page.total} 个案件</span>{page.total > PAGE_SIZE ? <div>
+        {page.items.length === 0 ? (
+          showArchived
+            ? <EmptyState title="暂无已归档案件" detail="结案归档后的案件会收录在此，可随时进入取消归档。" />
+            : <EmptyState title="还没有案件" detail="新建案件后，可以登记办案节点和期限。" />
+        ) : null}
+        <footer className="table-footer"><span>共 {page.total} 个{showArchived ? '已归档' : ''}案件</span>{page.total > PAGE_SIZE ? <div>
           <Button variant="quiet" disabled={offset === 0} onClick={() => setOffset(offset - PAGE_SIZE)}>上一页</Button>
           <Button variant="quiet" disabled={offset + PAGE_SIZE >= page.total} onClick={() => setOffset(offset + PAGE_SIZE)}>下一页</Button>
         </div> : null}</footer>

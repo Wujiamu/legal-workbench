@@ -62,7 +62,7 @@ def test_lwb_launch_starts_service_when_not_running(monkeypatch, tmp_path):
     )
 
     assert len(popens) == 1
-    assert popens[0][-2:] == [str(tmp_path / "workspace" / "scripts/lwb"), "start"]
+    assert popens[0][-2:] == [str(tmp_path / "workspace" / "scripts" / "lwb"), "start"]
     assert len(opened) == 1
 
 

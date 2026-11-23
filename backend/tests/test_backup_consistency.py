@@ -15,7 +15,7 @@ from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 
 from legal_workbench import analysis, backup, consistency, imports, models, parsing, search, worker
-from legal_workbench.config import load_settings
+from legal_workbench.config import load_settings, resolve_pg_bin
 from legal_workbench.db import get_engine, get_session_factory
 from legal_workbench.errors import ErrorCode, WorkbenchError
 from legal_workbench.parsing import pipeline
@@ -25,7 +25,8 @@ from legal_workbench.storage import Storage
 from . import factories
 
 BACKEND = Path(__file__).resolve().parents[1]
-PG_BIN = "/opt/homebrew/opt/postgresql@18/bin"
+_resolved_pg_bin = resolve_pg_bin()
+PG_BIN = str(_resolved_pg_bin) if _resolved_pg_bin else None
 RESTORE_DB = "legal_workbench_restore"
 
 

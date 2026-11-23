@@ -8,14 +8,15 @@ description: 使用本机法律工作台 CLI 与同源 HTTP 上传入口查询�
 在本机工作台目录运行命令（无需依赖当前工作目录）：
 
 ```sh
-"<PROJECT_ROOT>/backend/.venv/bin/python" -m legal_workbench.cli <子命令> [参数]
+"<PROJECT_ROOT>/backend/.venv/bin/python" -m legal_workbench.cli <子命令> [参数]          # macOS / Linux
+# "<PROJECT_ROOT>\backend\.venv\Scripts\python.exe" -m legal_workbench.cli <子命令> [参数] # Windows
 ```
 
 > 成功输出 stdout 单行 JSON（退出码 `0`）；业务错误输出 `{code, message, details}` 至 stderr（退出码 `2`）；未预期异常退出码 `1`。支持通过 `<子命令> --help` 核对精确参数。
 
 ## 1. 连通性与案件管理
 
-- **只读连通检查**：`list-cases --limit 0`（确认 PostgreSQL 在线，不拉取正式案件列表）。若数据库未运行，可先启动桌面「法律工作台.app」或运行 `scripts/lwb start` 后重试。
+- **只读连通检查**：`list-cases --limit 0`（确认 PostgreSQL 在线，不拉取正式案件列表）。若数据库未运行，可先启动桌面「法律工作台.app」（Windows 为「法律工作台.bat」）或运行 `scripts/lwb start`（Windows 为 `scripts\lwb.cmd start`）后重试。
 - **建案 / 列案 / 列材料 / 查覆盖**：
   - `create-case --title "案件名称"`
   - `list-cases --limit 20`

@@ -17,7 +17,7 @@ const PLOT_TOP = HEADER + 30;
 const PLOT_HEIGHT = 204;
 const LABEL_BLOCK = 56;
 const COL_STEP = 112;
-const FONT = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", '
+const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", '
   + '"Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif';
 
 const COLOR_POSITIVE = '#2f5d50';

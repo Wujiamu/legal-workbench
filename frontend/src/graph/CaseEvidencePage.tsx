@@ -4,6 +4,7 @@
  */
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router';
+import { CaseNavBar } from '../components/CaseNavBar';
 import { evidenceApi } from '../api/endpoints';
 import { EvidenceCatalogPanel } from './EvidenceCatalogPanel';
 import { EvidenceImportPanel } from './EvidenceImportPanel';
@@ -42,8 +43,9 @@ function CaseEvidence({ caseId }: { caseId: string }) {
       <header className="app-bar"><div className="app-bar-inner">
         <span className="app-brand">法律工作台</span>
         <span className="app-section">证据目录</span>
-        <Link to={`/cases/${caseId}`}>← 案件工作区</Link>
+        <Link to="/">← 案件工作表</Link>
       </div></header>
+      <CaseNavBar caseId={caseId} active="evidence" />
       <main className="graph-main">
         <div className="page-heading graph-heading">
           <div>

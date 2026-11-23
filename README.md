@@ -4,7 +4,7 @@
 
 所有案件数据与文件均保存在本机（单个 PostgreSQL 18 实例 + 受管文件目录 `var/data/`），不上传任何内容，无遥测或外部云依赖。
 
-> **适用范围**：个人或小团队在单机 macOS 上整理和核验诉讼案卷。**不适用**：多人在线协作、细粒度权限分级、云端同步或实时法律推理生成。
+> **适用范围**：个人或小团队在单机 macOS 或 Windows 10/11 上整理和核验诉讼案卷。**不适用**：多人在线协作、细粒度权限分级、云端同步或实时法律推理生成。
 
 ---
 
@@ -15,7 +15,7 @@
   - 支持浏览器相对路径上传与显式白名单目录导入（`LWB_IMPORT_ROOTS`），原件按内容 SHA-256 去重存放，支持创建可编辑工作副本并登记为新版本，原件与历史版本均不可覆盖；损坏文件安全隔离记录为失败状态。
   - 全离线解析 TXT（UTF-8 / GB18030）、DOCX（含嵌套表格）、XLSX（值与公式缓存）、PDF（文本层提取 + RapidOCR 扫描识别）及图片（含多帧 TIFF）。OCR 模型经 SHA-256 清单校验，运行时绝不联网下载。
 - **四模式精确检索与原件核对**：支持字面、编号、金额（分币种严格隔离，支持表格拆列币种金额）与日期检索；每条命中均携带不可变 `source_ref` 与字符偏移，支持 PDF 固定页预览、原图查看及 Agent/人工标注复核。
-- **办案进度树、归档与工时**：大纲与图形双视图管理「程序 → 阶段 → 工作/事件」节点树，支持模板片段插入、节点关系与材料关联、Agent 待确认变更审阅与 `⌘Z` 分区撤销；支持结案归档（全局只读防穿透与取消归档）及工时计时（15 分钟向上取整）/ 0.25h 补录。
+- **办案进度树、归档与工时**：大纲与图形双视图管理「程序 → 阶段 → 工作/事件」节点树，支持模板片段插入、节点关系与材料关联、Agent 待确认变更审阅与 `⌘Z` / `Ctrl+Z` 分区撤销；支持结案归档（全局只读防穿透与取消归档）及工时计时（15 分钟向上取整）/ 0.25h 补录。
 - **主体关系图、证据目录与诉请金额**：
   - **一案多图**：主名＋别名全案共现秒查、阅卷/标注一键入图、材料覆盖健康矩阵与防漏强指纹审计（孤儿机构、手机号、统一社会信用代码、银行账号、邮箱碰撞）、候选主体消歧台，以及带多币种分桶与冲突拦截的 XLSX/CSV 通用列映射导入。
   - **证据目录与诉请金额**：目录集中维护编号、绑定与冻结快照；诉请按分组和币种用整数分精确汇总本金、费用、利息、违约金与抵扣，可排除备位重叠项。
@@ -66,6 +66,39 @@ scripts/lwb migrate    # 单独执行 Alembic 迁移（alembic.ini 不含连接�
 scripts/lwb worker     # 单独运行一个解析 worker（受 PostgreSQL advisory lock 保护）
 scripts/lwb doctor     # 检查 Python / Node / PostgreSQL / 数据目录 / OCR 模型 / 维护标志
 ```
+
+---
+
+## 快速开始（Windows 10/11 原生环境）
+
+> 注意：请将项目与 `LWB_DATA_ROOT` 放在 **NTFS 本地磁盘**（无覆盖发布依赖同卷硬链接 `os.link`，请勿放到同步盘或 FAT32/exFAT）；静态数据明文保存，建议启用 Windows BitLocker 全盘加密。
+
+### 1. 环境前提
+
+需要本机已安装：
+- Windows 10/11（x64）
+- Python 3.13（含 `pythonw.exe`）、`uv`
+- Node.js `22.22.2+` / `24.15.0+` / `26+` 与 `npm`
+- PostgreSQL 18（默认自动探测 `C:\Program Files\PostgreSQL\18\bin` 或 `PATH`；若安装在其他目录，可在初始化前设 `$env:LWB_PG_BIN` 或写入 `.env`）
+
+> 不需要开启 PostgreSQL Windows 系统服务；工作台使用项目内独立数据目录 `var\postgres\`，监听 `127.0.0.1:55432`。
+
+### 2. 安装依赖与初始化（PowerShell）
+
+```powershell
+cd backend; uv sync --locked; cd ..
+cd frontend; npm ci; npm run build; cd ..
+
+# 写入离线 OCR 模型与 SHA-256 清单到 var\models\rapidocr\（仅此一步需联网）
+backend\.venv\Scripts\python.exe scripts\install_ocr_models.py
+
+# 初始化 PostgreSQL 18（UTF-8 + builtin C.UTF-8 区域设置）、生成 .env 凭据、迁移并启动
+scripts\lwb.cmd init
+```
+
+- 完成后可通过 `http://127.0.0.1:8765/` 访问工作台，或**双击根目录 `法律工作台.bat`**（支持无黑框后台启动、断库自愈与独占锁防重；也可右键「发送到桌面快捷方式」）。
+- 日常命令将上节 `scripts/lwb <子命令>` 替换为 `scripts\lwb.cmd <子命令>`，后端 Python 入口使用 `backend\.venv\Scripts\python.exe`。
+- Windows 实机验收自检步骤见 [docs/WINDOWS_CHECKLIST.md](docs/WINDOWS_CHECKLIST.md)。
 
 ---
 
@@ -161,11 +194,11 @@ cd backend
 
 - **当前版本基线**：`v0.1.0`（数据库迁移基线 `0008_claim_amounts`）。
 - **验证覆盖**：
-  - 后端：611 项全量回归（真实 PostgreSQL 18 隔离运行）＋ 4 项 `test_lwb_launch.py` 启动器回归通过；
-  - 前端：403 项组件测试（56 个测试文件）＋ `tsc --noEmit` ＋ Vite 生产构建通过；
-  - 本机实机联调与 Chromium 端到端核验通过（本地验收截图与运行日志归档于 `docs/reports/`，默认由 `.gitignore` 忽略不随仓库分发）。
+  - 后端：622 项通过、1 项按平台跳过（`test_real_windows_ntfs_junction_rejected`，仅在真实 Windows 运行；真实 PostgreSQL 18 隔离运行）；
+  - 前端：407 项组件测试（57 个测试文件）＋ `tsc --noEmit` ＋ Vite 生产构建通过；
+  - `scripts/lwb doctor` 与 `acceptance_simulation/generate_dossier.py` 跨平台字体/PDF 烟测通过；本机 macOS 实机联调与 Chromium 端到端核验通过（本地验收截图与运行日志归档于 `docs/reports/`，默认由 `.gitignore` 忽略不随仓库分发）。
 - **明确边界**：
-  - 仅在 macOS Apple Silicon 验证单用户离线运行；Linux / Windows 桌面脚本未验证，不支持多用户并发协作或云同步。
+  - macOS Apple Silicon 已完成全量实机运行验证；Windows 10/11 已完成原生源码适配、桌面/命令行启动器与跨平台模拟单测，尚待在真实 Windows 宿主机按 [docs/WINDOWS_CHECKLIST.md](docs/WINDOWS_CHECKLIST.md) 完成实机端到端核验；Linux 桌面与 `pg_ctl` 路径未实机验证；不支持多用户并发协作或云同步。
   - 真实涉案材料的小规模试用、新版关系图/诉请页的 Safari 实机手测与每日定时自动备份建议在日常使用前按需补齐（详见 [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md)）。
   - 历史规划中提及的「原有 22 条检索测试样本」因未取得原样本仍标为待交接。
 
@@ -183,6 +216,7 @@ cd backend
 | [docs/API.md](docs/API.md) | HTTP 接口契约（含 [docs/openapi.json](docs/openapi.json)） |
 | [docs/AGENT.md](docs/AGENT.md) | CLI 与 MCP（stdio）接入规范与内置 Skill 说明 |
 | [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md) | 备份校验、空环境恢复与维护标志应急处理 |
+| [docs/WINDOWS_CHECKLIST.md](docs/WINDOWS_CHECKLIST.md) | Windows 10/11 原生环境实机验收自检清单 |
 | [docs/TEST_REPORT.md](docs/TEST_REPORT.md) | 测试覆盖矩阵、关键验证点与未验证边界 |
 | [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) | 现行运行基线、已知限制、候选路线与技术债 |
 | [docs/REUSE.md](docs/REUSE.md) | 第三方依赖清单与许可证信息 |

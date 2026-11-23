@@ -74,7 +74,7 @@ async def handle_unexpected_error(request: Request, exc: Exception) -> JSONRespo
                         content=error.to_response(request_id(request)).model_dump(mode="json"))
 
 
-dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+dist = (Path(__file__).resolve().parents[3] / "frontend" / "dist").resolve()
 if dist.is_dir():
     # 带内容哈希的构建产物可长期缓存；index.html 绝不缓存，
     # 否则浏览器启发式新鲜度会让用户停留在旧壳上（看不到新构建）。
@@ -99,6 +99,6 @@ if dist.is_dir():
             raise WorkbenchError(ErrorCode.NOT_FOUND, "接口不存在",
                                  {"path": "/" + full_path})
         candidate = dist / full_path
-        if full_path and candidate.is_file() and dist in candidate.resolve().parents:
+        if full_path and candidate.is_file() and candidate.resolve().is_relative_to(dist):
             return FileResponse(candidate)
         return FileResponse(dist / "index.html", media_type="text/html")

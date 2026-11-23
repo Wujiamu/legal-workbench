@@ -70,6 +70,28 @@ def time_limit(seconds: float):
         signal.signal(signal.SIGALRM, previous)
 
 
+def _call_with_thread_timeout(fn, seconds: float):
+    """Windows / non-main-thread fallback when SIGALRM is unavailable."""
+    done = threading.Event()
+    outcome: list = [None, None]
+
+    def runner() -> None:
+        try:
+            outcome[0] = fn()
+        except BaseException as exc:  # noqa: BLE001 - propagated to caller
+            outcome[1] = exc
+        finally:
+            done.set()
+
+    thread = threading.Thread(target=runner, name="lwb-ocr-timeout", daemon=True)
+    thread.start()
+    if not done.wait(seconds):
+        raise TimeoutError("parse timeout")
+    if outcome[1] is not None:
+        raise outcome[1]
+    return outcome[0]
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -133,17 +155,21 @@ class OcrEngine:
 
     def recognize(self, image: Image.Image, timeout: float | None = None) -> OcrPage:
         limit = self.settings.parse_timeout_seconds if timeout is None else timeout
-        with time_limit(limit) as deadline:
-            try:
-                result, _elapse = self._engine(image)
-            except TimeoutError:
-                raise
-            except Exception:
-                # The alarm fired but the library wrapped the TimeoutError:
-                # report the timeout, not the wrapper's type.
-                if deadline.expired:
-                    raise TimeoutError("parse timeout") from None
-                raise
+        use_sigalrm = hasattr(signal, "SIGALRM") and threading.current_thread() is threading.main_thread()
+        if limit > 0 and not use_sigalrm:
+            result, _elapse = _call_with_thread_timeout(lambda: self._engine(image), limit)
+        else:
+            with time_limit(limit) as deadline:
+                try:
+                    result, _elapse = self._engine(image)
+                except TimeoutError:
+                    raise
+                except Exception:
+                    # The alarm fired but the library wrapped the TimeoutError:
+                    # report the timeout, not the wrapper's type.
+                    if deadline.expired:
+                        raise TimeoutError("parse timeout") from None
+                    raise
         if not result:
             return OcrPage(text="", boxes=[])
         boxes: list[OcrBox] = []

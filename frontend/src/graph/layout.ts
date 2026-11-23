@@ -8,7 +8,7 @@ import type { ElkNode } from 'elkjs/lib/elk-api';
 import type { CanvasModel } from './types';
 
 export const NODE_WIDTH = 188;
-export const NODE_HEIGHT = 76;
+export const NODE_HEIGHT = 108;
 const GROUP_HEADER = 44;
 const GROUP_PADDING = 24;
 
@@ -40,9 +40,9 @@ export async function autoLayout(model: CanvasModel,
     id: 'root',
     layoutOptions: {
       'elk.algorithm': algorithm,
-      'elk.spacing.nodeNode': '56',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '96',
-      'elk.stress.desiredEdgeLength': '190',
+      'elk.spacing.nodeNode': '110',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '240',
+      'elk.stress.desiredEdgeLength': '340',
       'elk.padding': '[top=72,left=40,bottom=40,right=40]',
       ...(algorithm === 'layered' ? { 'elk.direction': 'RIGHT' } : {}),
     },

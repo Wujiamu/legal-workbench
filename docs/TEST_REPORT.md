@@ -6,8 +6,9 @@
 
 | 项目 | 结果 |
 |---|---|
-| 最近全量通过 | **1018 项**（后端 **615** 项 = 2026-11-23 `611 passed, 1 warning in 147.50s` 真实 PG18 全量 + `test_lwb_launch.py` 4 项纯单测；前端 **403** 项 56 个测试文件 + `tsc --noEmit && vite build` 通过） |
+| 最近全量通过 | **1029 项**（后端 **622 passed, 1 skipped, 1 warning in 156.06s** 真实 PG18 全量，唯一 skip 为仅限真 Windows 的 `test_real_windows_ntfs_junction_rejected`；前端 **407** 项 57 个测试文件 + `tsc --noEmit && vite build` 通过） |
 | 数据库 | 真实 PostgreSQL 18（隔离验证），无 SQLite、无内存库 |
+| Windows 10/11 原生适配（2026-11-23） | 后端新增 `test_windows_compat.py`（8 项：Windows `PG_BIN`/`pg_env`、无 `SIGALRM` 线程超时、保留名/NTFS 路径守卫与真实 junction、脚本生命周期与 `lwb-launch` 锁/窗口/Browser/MessageBox、备份清单元/环境隔离）；前端新增 `src/ui/shortcuts.test.tsx`（2 项：`Win32` `Ctrl+Z` / `MacIntel` `⌘Z`）。经两轮独立代码审查闭环；`scripts/lwb doctor` 与 `generate_dossier` PDF 烟测通过；真实 Windows 宿主机实机验收按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 留作待办 |
 | `v0.1.0` 收尾与实机九项修复（2026-11-23） | 后端新增 `test_acceptance_fixes_20261123.py`（10 项全链路回归）与 `test_lwb_launch.py`（4 项断库恢复单测），前端新增 `CaseArchiveUiGuards.test.tsx`、`GraphCanvas.test.tsx` 等；两轮独立代码审查签收闭环；正式 `127.0.0.1:8765` 升级后 `check-consistency`（`ok: true`）、CLI/服务只读与拒写、内置 Chromium 四页实机复测通过 |
 | 图表程序化与对外引用验收（2026-11-22） | 后端新增 `test_chart_export.py`、`test_graph_assist.py`、`test_graph_assist_audit.py`、`test_table_graph_import.py`、`test_chart_assist_transports.py`，前端新增 `ChartExportDialog.test.tsx`、`CoverageMatrix.test.tsx`、`SendToGraphDialog.test.tsx`、`GraphAuditDrawer.test.tsx`、`CaseGraphWorkspaceAssist.test.tsx`、`exportSvg.test.ts`、`httpExecutor.test.ts` 等；AC10 外部复核实测检出 3 类预设错误、AC12 前后端独立双审闭环、Chromium 隔离两轮 E2E 通过（含 `save_layout` 修复复测），正式应用后 `check-consistency`（`ok: true`）及只读 HTTP 验收通过。Safari 实机未测、真实案件尚未试用。见 [图表程序化能力验收与正式应用](reports/20261122-图表程序化能力验收与正式应用.md) |
 | 联合回归与后续专项 | 后端全量后新增独立材料绑定保护，证据目录及关系图定向 65 项通过。前端全量、TypeScript 检查及生产构建通过。见 [整改复测](reports/20261122-P5联合隔离验收.md#2026-11-22-整改复测) |
@@ -61,11 +62,12 @@
 | `test_case_archive_time.py` | 10 | 结案归档与工时：归档后进度/材料/办理信息写入被拒、列表过滤与首页隐藏、取消归档恢复；归档 CAS 冲突；有未停止计时拒绝归档、归档后工时只读；计时 0.25h 向上取整、重复计时拒绝、已停止不能再停；补录 0.25 步进校验、日视图合计与软删除；补录不被当成进行中计时（不挡计时与归档）；停止补录被拒且时长不变；日视图含进行中条目但标题汇总只计已完成；审计记录 case.archive/time.start/time.stop；跨案工时记录拒绝 |
 | `test_acceptance_fixes_20261123.py` | 10 | 实机验收九项缺陷＋审查复核回归：归档阻断标注与分析创建/复核、多币种 XLSX 分桶与 `currency_conflict_same_pair`（含 `HK$`/`US$` 与存量无币种关系）、表格拆列币种金额精确检索（防误抽年份/回单号＋公式缓存）、损坏 PDF 归类 `PARSE_FAILED`、诉请引证附表 DOCX 段落与 TXT 行号定位、CLI `save-analysis --content-file` 互斥与读异常 `invalid_input`、畸形 `locator` 容错 |
 | `test_lwb_launch.py` | 4 | 桌面启动器 `scripts/lwb-launch`：正常就绪免拉起、未运行时拉起 `lwb start`、网页在线但数据库停止时自动执行 `lwb start-db` 与恢复 `lwb worker`、数据库拉起失败立即报错不空等 |
+| `test_windows_compat.py` | 8 | Windows 跨平台适配（7 项跨平台模拟 + 1 项真实 NTFS Junction 在非 Windows 跳过）：`LWB_PG_BIN` 与 Windows 候选目录探测、`pg_env()` 不强制 `LC_ALL`、无 `SIGALRM` 线程版 OCR 超时与异常保留、`safe_name` Windows 保留名/空格/截断边界与 NTFS 路径守卫、Junction 拦截、`lwb` builtin `C.UTF-8` 与错误脱敏、`lwb-launch` `msvcrt` 锁/`CREATE_NO_WINDOW`/`os.startfile`/`MessageBoxW`、备份清单越界拦截 |
 | `test_archive_time_migration.py` | 1 | 0005 → head：`cases.archived_at` 与 `time_entries` 建立、旧案件保留且归档时间为空、app 角色可写计时与归档审计、手动工时无需 started_at；downgrade 回 0005 删表删列且进度数据与旧案件不受影响；再升级成功 |
 
 ## 前端测试
 
-`frontend` 使用 Vitest CLI、jsdom 和 Testing Library，截至 2026-11-23 共 **403 项**（56 个测试文件；除下方历史逐文件清单外，后续新增关系图/证据目录/诉请金额/图表程序化及实机缺陷回归测试（`CaseArchiveUiGuards.test.tsx`、`GraphCanvas.test.tsx` 等）见 [2026-11-22 联合验收与正式升级记录](reports/20261122-P5联合隔离验收.md)、[图表程序化能力验收与正式应用](reports/20261122-图表程序化能力验收与正式应用.md) 与 [2026-11-23 TEST-ONLY 实机验收修复与正式应用报告](reports/20261123-TEST-ONLY-实机验收修复与正式应用.md)）：
+`frontend` 使用 Vitest CLI、jsdom 和 Testing Library，截至 2026-11-23 共 **407 项**（57 个测试文件；除下方历史逐文件清单外，后续新增关系图/证据目录/诉请金额/图表程序化/跨平台快捷键 `src/ui/shortcuts.test.tsx`、首页归档切换及共享导航 `?view=` 同步等回归见 `CaseArchiveUiGuards.test.tsx`、`CasesPage.test.tsx`、`GraphCanvas.test.tsx` 与 `CHANGELOG.md`；本机历史报告归档于 `docs/reports/` 不随开源仓库分发）：
 
 | 文件 | 条数 | 覆盖内容 |
 |---|---|---|
@@ -127,7 +129,8 @@
 |---|---|---|
 | 原有 22 条检索测试 | **待交接** | 未拿到原样本与期望结果。本项目测试是另行编写的，不能替代 |
 | 原审查六项目 | **未提供** | 无 commit 清单，`docs/REUSE.md` 只记录实际安装版本 |
-| Linux 平台 | **未验证** | 只在 macOS Apple Silicon 上跑过 |
+| Linux 平台 | **未验证** | 只在 macOS Apple Silicon 上跑过实机 |
+| Windows 10/11 宿主机实机 | **待真机验收** | 跨平台源码、启动器与模拟单测已通过（含两轮独立审查），因本机为 macOS 尚未在真 Windows 宿主机实跑 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) |
 | 真实案件材料 | **未使用** | 全部为合成数据；首次真实导入前需先备份 |
 | 5 万页以上规模 | **未验证** | 只测到 1000 文件 / 10000 页 |
 | 备份进程被 `kill -9` | **部分验证** | 验证了 `INCOMPLETE` 标记存在与拒绝恢复，未验证完整恢复路径 |

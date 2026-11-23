@@ -17,6 +17,7 @@ import type { CommandResult, ProgressCommand, ProgressExecutor, ProgressNode } f
 import { createUndoStacks, inverseOf } from './undo';
 import type { UndoZone } from './undo';
 import { useCaseProgress } from './useCaseProgress';
+import { undoShortcutLabel } from '../ui/shortcuts';
 import './progress.css';
 
 type EditorState =
@@ -125,6 +126,7 @@ export default function ProgressPrototypePage() {
 
   if (!snapshot) return <p className="progress-loading">加载中…</p>;
 
+  const undoKey = undoShortcutLabel();
   const selected = snapshot.nodes.find((node) => node.id === selectedId) ?? null;
 
   function toggleCollapse(nodeId: string) {
@@ -222,11 +224,11 @@ export default function ProgressPrototypePage() {
               <button type="button" onClick={() => setCollapsedIds(new Set())}>展开全部</button>
               <button type="button" onClick={collapseAll}>收起全部</button>
               {undoRef.current.depth('graph') > 0 ? (
-                <button type="button" onClick={() => undoZone('graph')} title="撤销本区域最近一步（⌘Z）">
+                <button type="button" onClick={() => undoZone('graph')} title={`撤销本区域最近一步（${undoKey}）`}>
                   撤销（{undoRef.current.depth('graph')}）
                 </button>
               ) : null}
-              <span className="muted">收起状态两种视图共享，不写入数据 · ⌘Z 撤销高亮区域</span>
+              <span className="muted">收起状态两种视图共享，不写入数据 · {undoKey} 撤销高亮区域</span>
             </div>
             {view === 'outline' ? (
               <OutlineView snapshot={snapshot} rules={rules} selectedId={selectedId}

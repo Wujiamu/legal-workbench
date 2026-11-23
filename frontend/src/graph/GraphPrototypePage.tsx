@@ -13,6 +13,7 @@ import { buildGraphFixture, FIXTURE_CASE_ID } from './fixtures';
 import { createMemoryGraphSource } from './memorySource';
 import { credibilityRule, defaultRules } from './rules';
 import { useGraphWorkspace } from './useGraphWorkspace';
+import { undoShortcutLabel } from '../ui/shortcuts';
 import './graph.css';
 
 export default function GraphPrototypePage() {
@@ -120,7 +121,7 @@ export default function GraphPrototypePage() {
           onClick={() => { void workspace.runAgent({
             type: 'import_evidence_catalog', request_key: `import-${Date.now()}`,
           }); }}>模拟外部目录导入</button>
-        <button type="button" onClick={() => void workspace.undo()}>撤销（⌘Z）</button>
+        <button type="button" onClick={() => void workspace.undo()}>撤销（{undoShortcutLabel()}）</button>
         <button type="button" onClick={resetDemo}>重置演示</button>
         <span className="muted">
           seq={ws.seq} · 待确认 {ws.pending_changes.length} · 证据 seq={ws.seqs.evidence}

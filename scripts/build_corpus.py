@@ -7,6 +7,7 @@ points:
 """
 from __future__ import annotations
 
+import os
 import random
 import zipfile
 from pathlib import Path
@@ -17,10 +18,16 @@ from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+_WIN_FONTS = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
 FONT_CANDIDATES = (
     "/System/Library/Fonts/Hiragino Sans GB.ttc",
     "/System/Library/Fonts/STHeiti Light.ttc",
     "/Library/Fonts/Arial Unicode.ttf",
+    str(_WIN_FONTS / "msyh.ttc"),
+    str(_WIN_FONTS / "simhei.ttf"),
+    str(_WIN_FONTS / "simsun.ttc"),
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
 )
 
 CLAUSE_TEMPLATES = (

@@ -11,7 +11,7 @@ vi.mock('../api/endpoints', async () => {
   const actual = await vi.importActual<typeof import('../api/endpoints')>('../api/endpoints');
   return {
     ...actual,
-    casesApi: { ...actual.casesApi, dashboard: vi.fn(), deadlines: vi.fn() },
+    casesApi: { ...actual.casesApi, dashboard: vi.fn(), deadlines: vi.fn(), list: vi.fn() },
   };
 });
 
@@ -21,6 +21,7 @@ import { CasesPage } from './CasesPage';
 
 const dashboard = vi.mocked(casesApi.dashboard);
 const deadlines = vi.mocked(casesApi.deadlines);
+const listCases = vi.mocked(casesApi.list);
 
 function overview(overrides: Partial<CaseOverview> & { case_id: string; title: string }): CaseOverview {
   return {
@@ -108,5 +109,34 @@ describe('CasesPage 期限时间轴接线', () => {
     await screen.findByRole('link', { name: 'TEST-ONLY 甲案' });
     await waitFor(() => expect(screen.getByText(/无法连接本地服务/)).toBeTruthy());
     expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
+  });
+
+  it('首屏不展示原型入口，支持切换查看并找回已归档案件', async () => {
+    dashboard.mockResolvedValue(PAGE);
+    deadlines.mockResolvedValue(TIMELINE);
+    listCases.mockResolvedValue({
+      items: [overview({
+        case_id: 'case-archived-1',
+        title: 'TEST-ONLY 已归档测试案',
+        archived_at: '2026-11-23T03:58:16Z',
+      })],
+      offset: 0,
+      limit: 50,
+      total: 1,
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter><CasesPage /></MemoryRouter>);
+
+    await screen.findByRole('link', { name: 'TEST-ONLY 甲案' });
+    expect(screen.queryByRole('link', { name: /原型/ })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '查看已归档' }));
+    await screen.findByRole('link', { name: 'TEST-ONLY 已归档测试案' });
+    expect(screen.getByText('已归档 2026-11-23')).toBeTruthy();
+    expect(screen.getByText('共 1 个已归档案件')).toBeTruthy();
+    expect(listCases).toHaveBeenCalledWith(0, 50, expect.any(AbortSignal), true);
+
+    await user.click(screen.getByRole('button', { name: '返回在办案件' }));
+    await screen.findByRole('link', { name: 'TEST-ONLY 甲案' });
   });
 });

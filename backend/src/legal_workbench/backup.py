@@ -18,12 +18,13 @@ import subprocess
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from . import audit, models
+from .config import _is_windows, pg_env, resolve_pg_bin
 from .db import MAINTENANCE_KEY, get_engine
 from .errors import ErrorCode, WorkbenchError
 from .storage import hash_file
@@ -110,16 +111,23 @@ def take_exclusive_lock(session: Session, *, timeout_ms: int = 60000) -> None:
                              {"error": type(exc).__name__})
 
 
+def _pg_tool(name: str, pg_bin: str | None) -> str:
+    resolved = resolve_pg_bin(pg_bin)
+    tool = shutil.which(name, path=str(resolved)) if resolved else shutil.which(name)
+    if not tool:
+        raise WorkbenchError(ErrorCode.DEPENDENCY_MISSING, f"找不到 {name}",
+                             {"pg_bin": str(resolved) if resolved else (pg_bin or "")})
+    return tool
+
+
 def _pg_dump(database_url: str, target: Path, pg_bin: str | None = None) -> None:
-    pg_dump = shutil.which("pg_dump", path=pg_bin) if pg_bin else shutil.which("pg_dump")
-    if not pg_dump:
-        raise WorkbenchError(ErrorCode.DEPENDENCY_MISSING, "找不到 pg_dump",
-                             {"pg_bin": pg_bin or ""})
-    env = dict(os.environ, LC_ALL="en_US.UTF-8")
+    pg_dump = _pg_tool("pg_dump", pg_bin)
+    kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} if _is_windows() else {}
     result = subprocess.run(
         [pg_dump, "--format=custom", "--no-owner", "--no-acl", "--file", str(target),
          database_url],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=pg_env(), **kwargs,
     )
     if result.returncode != 0:
         target.unlink(missing_ok=True)
@@ -242,12 +250,17 @@ def verify_backup(destination: Path) -> dict:
     if actual != manifest["database"]["sha256"]:
         raise WorkbenchError(ErrorCode.INTEGRITY_ERROR, "数据库备份哈希不符",
                              {"expected": manifest["database"]["sha256"], "actual": actual})
+    files_root = (destination / FILES_DIR).resolve()
     for entry in manifest["files"]:
         relative = entry["relative_path"]
-        path = destination / FILES_DIR / relative
-        try:
-            path.resolve().relative_to((destination / FILES_DIR).resolve())
-        except ValueError:
+        pure = PurePosixPath(relative)
+        if (not relative or "\\" in relative or pure.is_absolute()
+                or PureWindowsPath(relative).is_absolute()
+                or any(part in ("", ".", "..") or ":" in part for part in pure.parts)):
+            raise WorkbenchError(ErrorCode.INVALID_PATH, "备份清单包含越界路径",
+                                 {"relative_path": relative})
+        path = files_root / relative
+        if not path.resolve(strict=False).is_relative_to(files_root):
             raise WorkbenchError(ErrorCode.INVALID_PATH, "备份清单包含越界路径",
                                  {"relative_path": relative})
         if not path.is_file():
@@ -332,15 +345,13 @@ def _database_is_empty(database_url: str, pg_bin: str | None) -> bool:
 
 
 def _pg_restore(dump: Path, database_url: str, pg_bin: str | None) -> None:
-    pg_restore = shutil.which("pg_restore", path=pg_bin) if pg_bin else shutil.which("pg_restore")
-    if not pg_restore:
-        raise WorkbenchError(ErrorCode.DEPENDENCY_MISSING, "找不到 pg_restore",
-                             {"pg_bin": pg_bin or ""})
-    env = dict(os.environ, LC_ALL="en_US.UTF-8")
+    pg_restore = _pg_tool("pg_restore", pg_bin)
+    kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} if _is_windows() else {}
     result = subprocess.run(
         [pg_restore, "--no-owner", "--no-acl", "--exit-on-error", "--dbname", database_url,
          str(dump)],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=pg_env(), **kwargs,
     )
     if result.returncode != 0:
         raise WorkbenchError(ErrorCode.INTERNAL_ERROR, "pg_restore 失败",

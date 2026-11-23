@@ -10,6 +10,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { describeError } from '../api/client';
 import { evidenceApi } from '../api/endpoints';
+import { CaseNavBar } from '../components/CaseNavBar';
 import { SourcePreview } from '../components/SourcePreview';
 import { EvidenceImportPanel } from './EvidenceImportPanel';
 import { GraphWorkspace } from './GraphWorkspace';
@@ -85,7 +86,8 @@ function CaseGraph({ caseId }: { caseId: string }) {
         onRetryRefresh={() => void workspace.reload()}
         onReload={workspace.reload}
         section="关系图"
-        headerAction={<Link to={`/cases/${caseId}`}>← 案件工作区</Link>}
+        headerAction={<Link to="/">← 案件工作表</Link>}
+        caseNav={<CaseNavBar caseId={caseId} active="graph" />}
         sourceOptions={searchSources}
         onOpenSource={openSource}
         onOpenSourcePreview={(info) => {

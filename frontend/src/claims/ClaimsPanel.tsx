@@ -265,7 +265,6 @@ export function ClaimsPanel({
             <h2>全案总计</h2>
             <p className="muted">按币种分别汇总；抵扣项按减项计入；整数分累加，不经过浮点。</p>
           </div>
-          <span className="claims-seq">变更序号 seq={snapshot.seq}</span>
         </div>
         <div className="claims-total-figures">
           {snapshot.totals_by_currency.length === 0

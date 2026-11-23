@@ -3,49 +3,108 @@
 import os
 from pathlib import Path
 import secrets
+import shutil
 import signal
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend" / "src"))
+
+from legal_workbench.config import _is_windows, load_settings, pg_env, resolve_pg_bin  # noqa: E402
+
 DATA = ROOT / "var" / "postgres"
 RUNTIME = ROOT / "var" / "runtime"
 ENV_FILE = ROOT / ".env"
-PG_BIN = Path(os.environ.get("LWB_PG_BIN", "/opt/homebrew/opt/postgresql@18/bin"))
 SUPERUSER = "lwb_super"
 MIGRATOR = "lwb_migrator"
 APP = "lwb_app"
 DATABASE = "legal_workbench"
 
 
+def _ensure_utf8_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if hasattr(stream, "reconfigure") and (sys.platform == "win32" or encoding != "utf8"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+def _require_pg_bin() -> Path:
+    pg_bin = resolve_pg_bin()
+    if pg_bin is None:
+        raise RuntimeError(
+            "找不到 PostgreSQL 18 工具目录；请安装 PostgreSQL 18 或在 .env 中设置 LWB_PG_BIN"
+        )
+    return pg_bin
+
+
+def _pg_tool(pg_bin: Path, name: str) -> str:
+    found = shutil.which(name, path=str(pg_bin))
+    if found:
+        return found
+    suffix = ".exe" if _is_windows() else ""
+    return str(pg_bin / f"{name}{suffix}")
+
+
+def _venv_python() -> Path:
+    if _is_windows():
+        return ROOT / "backend" / ".venv" / "Scripts" / "python.exe"
+    return ROOT / "backend" / ".venv" / "bin" / "python"
+
+
+def _backend_cmd(module_args: list[str], uv_args: list[str]) -> list[str]:
+    venv_py = _venv_python()
+    if venv_py.is_file():
+        return [str(venv_py), *module_args]
+    return ["uv", "run", "--locked", "--no-sync", *uv_args]
+
+
+def _win_subprocess_kwargs(*, capture: bool = False) -> dict:
+    if not _is_windows():
+        return {}
+    if capture or os.environ.get("LWB_BACKGROUND") == "1":
+        return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
+    return {}
+
+
 def run(args, **kwargs):
-    # PostgreSQL 18 on macOS aborts startup when the postmaster becomes
-    # multithreaded under an unset/invalid locale; force a stable one.
-    env = kwargs.pop("env", None) or dict(os.environ)
-    env.setdefault("LC_ALL", "en_US.UTF-8")
+    env = pg_env(kwargs.pop("env", None))
+    kwargs = {**_win_subprocess_kwargs(capture=bool(kwargs.get("capture_output"))), **kwargs}
     return subprocess.run([str(x) for x in args], check=True, env=env, **kwargs)
 
 
 def private_file(path, text):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as f:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(text)
 
 
 def initialize():
     if ENV_FILE.exists() or DATA.exists():
         raise RuntimeError(".env or database directory already exists; refusing to overwrite")
+    pg_bin = _require_pg_bin()
     RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
-    (ROOT / "var/data").mkdir(parents=True, exist_ok=True)
+    (ROOT / "var" / "data").mkdir(parents=True, exist_ok=True)
     super_pw, migrator_pw, app_pw = (secrets.token_urlsafe(32) for _ in range(3))
     pwfile = RUNTIME / "init-password"
     private_file(pwfile, super_pw + "\n")
+    initdb_cmd = [
+        _pg_tool(pg_bin, "initdb"),
+        "-D", DATA,
+        "-U", SUPERUSER,
+        "--auth=scram-sha-256",
+        "--pwfile", pwfile,
+        "--encoding=UTF8",
+    ]
+    if _is_windows():
+        # Windows system ANSI locales (such as CP936) conflict with --encoding=UTF8
+        # unless a UTF-8 builtin locale is requested explicitly.
+        initdb_cmd.extend(["--locale-provider=builtin", "--builtin-locale=C.UTF-8"])
     try:
-        run([PG_BIN / "initdb", "-D", DATA, "-U", SUPERUSER, "--auth=scram-sha-256",
-             "--pwfile", pwfile, "--encoding=UTF8"])
+        run(initdb_cmd)
     finally:
         pwfile.unlink(missing_ok=True)
-    with (DATA / "postgresql.conf").open("a") as f:
+    with (DATA / "postgresql.conf").open("a", encoding="utf-8") as f:
         f.write("\nlisten_addresses = '127.0.0.1'\nport = 55432\n")
     private_file(
         RUNTIME / "pgpass",
@@ -58,54 +117,70 @@ def initialize():
     # env, psql falls back to the default socket on 5432 and the roles land in
     # whatever instance happens to be listening there — or the command fails and
     # the new cluster is left running half-configured.
-    env = dict(os.environ, PGHOST="127.0.0.1", PGPORT="55432", PGUSER=SUPERUSER,
-               PGPASSFILE=str(RUNTIME / "pgpass"))
+    env = pg_env(extra={
+        "PGHOST": "127.0.0.1",
+        "PGPORT": "55432",
+        "PGUSER": SUPERUSER,
+        "PGPASSFILE": str(RUNTIME / "pgpass"),
+    })
+    pg_ctl = _pg_tool(pg_bin, "pg_ctl")
+    psql = _pg_tool(pg_bin, "psql")
+    createdb = _pg_tool(pg_bin, "createdb")
     try:
         # The migration role owns schema objects and may create test databases;
         # the application role gets DML only (granted by migrations).
-        run([PG_BIN / "psql", "-v", "ON_ERROR_STOP=1", "-d", "postgres", "-c",
+        run([psql, "-v", "ON_ERROR_STOP=1", "-d", "postgres", "-c",
              f"CREATE ROLE {MIGRATOR} LOGIN CREATEDB PASSWORD '{migrator_pw}'"], env=env)
-        run([PG_BIN / "psql", "-v", "ON_ERROR_STOP=1", "-d", "postgres", "-c",
+        run([psql, "-v", "ON_ERROR_STOP=1", "-d", "postgres", "-c",
              f"CREATE ROLE {APP} LOGIN PASSWORD '{app_pw}'"], env=env)
-        run([PG_BIN / "createdb", "-O", MIGRATOR, DATABASE], env=env)
+        run([createdb, "-O", MIGRATOR, DATABASE], env=env)
     except BaseException:
         # Leave no half-initialised cluster behind for the next `init` to trip on.
-        subprocess.run([str(PG_BIN / "pg_ctl"), "-D", str(DATA), "-w", "-m", "fast", "stop"],
-                       env=dict(os.environ, LC_ALL="en_US.UTF-8"), capture_output=True)
+        subprocess.run([pg_ctl, "-D", str(DATA), "-w", "-m", "fast", "stop"],
+                       env=pg_env(), capture_output=True, **_win_subprocess_kwargs(capture=True))
         raise
-    private_file(
-        ENV_FILE,
-        f"LWB_DATABASE_URL=postgresql://{APP}:{app_pw}@127.0.0.1:55432/{DATABASE}\n"
-        f"LWB_MIGRATION_URL=postgresql://{MIGRATOR}:{migrator_pw}@127.0.0.1:55432/{DATABASE}\n"
-    )
+    env_lines = [
+        f"LWB_DATABASE_URL=postgresql://{APP}:{app_pw}@127.0.0.1:55432/{DATABASE}\n",
+        f"LWB_MIGRATION_URL=postgresql://{MIGRATOR}:{migrator_pw}@127.0.0.1:55432/{DATABASE}\n",
+    ]
+    if os.environ.get("LWB_PG_BIN", "").strip():
+        env_lines.append(f"LWB_PG_BIN={pg_bin}\n")
+    private_file(ENV_FILE, "".join(env_lines))
     # One command has to leave a working installation: roles, database, config,
     # schema and a running service.  Stopping after the roles and telling the
     # user to run two more commands is where a fresh install was left half done.
-    print("角色与数据库已创建，凭据写入 .env（权限 0600）。开始迁移并启动。")
+    perm_note = "。" if _is_windows() else "（权限 0600）。"
+    print(f"角色与数据库已创建，凭据写入 .env{perm_note}开始迁移并启动。")
     try:
         migrate()
     except BaseException:
-        subprocess.run([str(PG_BIN / "pg_ctl"), "-D", str(DATA), "-w", "-m", "fast", "stop"],
-                       env=dict(os.environ, LC_ALL="en_US.UTF-8"), capture_output=True)
+        subprocess.run([pg_ctl, "-D", str(DATA), "-w", "-m", "fast", "stop"],
+                       env=pg_env(), capture_output=True, **_win_subprocess_kwargs(capture=True))
         raise
     return start()
 
 
 def start_db():
-    env = dict(os.environ)
-    env.setdefault("LC_ALL", "en_US.UTF-8")
-    status = subprocess.run([str(PG_BIN / "pg_ctl"), "-D", str(DATA), "status"],
-                            capture_output=True, env=env)
+    pg_bin = _require_pg_bin()
+    pg_ctl = _pg_tool(pg_bin, "pg_ctl")
+    env = pg_env()
+    status = subprocess.run(
+        [pg_ctl, "-D", str(DATA), "status"],
+        capture_output=True, env=env, **_win_subprocess_kwargs(capture=True),
+    )
     if status.returncode == 0:
         return
-    run([PG_BIN / "pg_ctl", "-D", DATA, "-l", RUNTIME / "postgres.log", "-w", "start"])
+    run([pg_ctl, "-D", DATA, "-l", RUNTIME / "postgres.log", "-w", "start"])
 
 
 def migrate():
     os.chdir(ROOT / "backend")
-    run(["uv", "run", "--locked", "--no-sync", "alembic", "upgrade", "head"])
+    run(_backend_cmd(["-m", "alembic", "upgrade", "head"], ["alembic", "upgrade", "head"]))
     # K14: instantiate default progress fragments for pre-existing cases (idempotent).
-    run(["uv", "run", "--locked", "--no-sync", "python", "-m", "legal_workbench.backfill_progress"])
+    run(_backend_cmd(
+        ["-m", "legal_workbench.backfill_progress"],
+        ["python", "-m", "legal_workbench.backfill_progress"],
+    ))
 
 
 def start():
@@ -116,15 +191,14 @@ def start():
     works across processes.  The web server runs as a child rather than via exec
     so this process survives to stop the worker when the server exits.
     """
-    sys.path.insert(0, str(ROOT / "backend/src"))
-    from legal_workbench.config import load_settings
     settings = load_settings()
     if settings.host != "127.0.0.1":
         raise RuntimeError("LWB_HOST must be 127.0.0.1")
     start_db()
     migrate()
     os.chdir(ROOT / "backend")
-    env = dict(os.environ, LC_ALL=os.environ.get("LC_ALL", "en_US.UTF-8"))
+    env = pg_env()
+    win_kwargs = _win_subprocess_kwargs()
     children = []
 
     def stop_children(*_signal):
@@ -140,26 +214,62 @@ def start():
             except subprocess.TimeoutExpired:
                 child.kill()
 
-    previous = signal.signal(signal.SIGTERM, stop_children)
+    previous_term = signal.signal(signal.SIGTERM, stop_children)
+    previous_break = (
+        signal.signal(signal.SIGBREAK, stop_children)
+        if hasattr(signal, "SIGBREAK") else None
+    )
     try:
         worker = subprocess.Popen(
-            ["uv", "run", "--locked", "--no-sync", "python", "-m", "legal_workbench.worker"],
-            env=env)
+            _backend_cmd(
+                ["-m", "legal_workbench.worker"],
+                ["python", "-m", "legal_workbench.worker"],
+            ),
+            env=env, **win_kwargs,
+        )
         children.append(worker)
         server = subprocess.Popen(
-            ["uv", "run", "--locked", "--no-sync", "uvicorn", "legal_workbench.app:app",
-             "--host", settings.host, "--port", str(settings.port), "--no-access-log"],
-            env=env)
+            _backend_cmd(
+                [
+                    "-m", "uvicorn", "legal_workbench.app:app",
+                    "--host", settings.host, "--port", str(settings.port), "--no-access-log",
+                ],
+                [
+                    "uvicorn", "legal_workbench.app:app",
+                    "--host", settings.host, "--port", str(settings.port), "--no-access-log",
+                ],
+            ),
+            env=env, **win_kwargs,
+        )
         children.append(server)
         return server.wait()
     except KeyboardInterrupt:
         return 0
     finally:
         stop_children()
-        signal.signal(signal.SIGTERM, previous)
+        signal.signal(signal.SIGTERM, previous_term)
+        if previous_break is not None and hasattr(signal, "SIGBREAK"):
+            signal.signal(signal.SIGBREAK, previous_break)
+
+
+def _exec_or_run(cmd: list[str]) -> int:
+    env = pg_env()
+    if _is_windows():
+        return subprocess.run(cmd, env=env, **_win_subprocess_kwargs()).returncode
+    os.execvpe(cmd[0], cmd, env)
+    return 0
+
+
+def _format_failure(exc: BaseException) -> str:
+    if isinstance(exc, subprocess.CalledProcessError):
+        # Never echo full command arguments (e.g. CREATE ROLE ... PASSWORD).
+        tool = Path(str(exc.cmd[0])).name if exc.cmd else "<command>"
+        return f"操作失败: 命令 {tool} 退出码 {exc.returncode}; 请检查本地配置及 PostgreSQL 状态。"
+    return f"操作失败: {type(exc).__name__} ({exc}); 请检查本地配置及 PostgreSQL 状态。"
 
 
 def main():
+    _ensure_utf8_stdio()
     if len(sys.argv) != 2 or sys.argv[1] not in ("init", "start", "start-db", "stop", "doctor", "migrate", "worker"):
         print("用法: scripts/lwb {init|migrate|start|start-db|stop|worker|doctor}", file=sys.stderr)
         return 2
@@ -176,13 +286,19 @@ def main():
         start_db()
     elif command == "worker":
         os.chdir(ROOT / "backend")
-        os.execvp("uv", ["uv", "run", "--locked", "--no-sync", "python", "-m",
-                         "legal_workbench.worker"])
+        return _exec_or_run(_backend_cmd(
+            ["-m", "legal_workbench.worker"],
+            ["python", "-m", "legal_workbench.worker"],
+        ))
     elif command == "stop":
-        run([PG_BIN / "pg_ctl", "-D", DATA, "-w", "stop", "-m", "fast"])
+        pg_bin = _require_pg_bin()
+        run([_pg_tool(pg_bin, "pg_ctl"), "-D", DATA, "-w", "stop", "-m", "fast"])
     else:
         os.chdir(ROOT / "backend")
-        os.execvp("uv", ["uv", "run", "--locked", "--no-sync", "python", "-m", "legal_workbench.doctor"])
+        return _exec_or_run(_backend_cmd(
+            ["-m", "legal_workbench.doctor"],
+            ["python", "-m", "legal_workbench.doctor"],
+        ))
     return 0
 
 
@@ -190,5 +306,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
-        print(f"操作失败: {type(exc).__name__}; 请检查本地配置及 PostgreSQL 状态。", file=sys.stderr)
+        print(_format_failure(exc), file=sys.stderr)
         raise SystemExit(1)

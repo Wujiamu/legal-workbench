@@ -1,5 +1,26 @@
 # 变更记录
 
+## 2026-11-23 · `v0.1.0` 界面交互与导航打磨（**源码与前端构建完成**）
+
+- **跨平台共用前端与交互修复**（macOS / Windows 共用一套 `frontend/` 代码，沿用 `undoShortcutLabel()` 平台键位与 `scrollbar-gutter: stable` 滚动条占位）：
+  - **首页找回归档与清理演示入口**：移除首页主操作区 3 个开发期「原型 · 演示数据」入口；新增「查看已归档 / 返回在办案件」切换按钮调用 `casesApi.list(..., true)` 展示已归档案件与归档日期。
+  - **全工作区共享案件导航栏**：抽取 [CaseNavBar.tsx](frontend/src/components/CaseNavBar.tsx) 统一复用至主工作区、办案进度、关系图、证据目录与诉请金额 5 个案件路由（补入「办案进度」），切工作区页签同步写入 URL `?view=`，主工作区归档时增加带取消归档入口的只读提示横幅。
+  - **办案进度与关系图排版及细节**：`.h-tree` 改为纵向分列多根程序并补 `flex-shrink: 0` 修复「二审」压盖「一审」；补齐进度页「结案归档」「一键确认/撤销」按钮样式；调大 `layout.ts` 节点高度与 `elk` 间距避免卡片遮挡边标签；修复选中图页签 `.muted` 对比度，限制 `.graph-review-list` `360px` 高度内滚动，默认折叠线型图例与真实案件页底部嵌套「案卷证据目录」；移除界面可见的 `import_material_id` 与 `seq=` 开发字段文案。
+- **验证与未覆盖项**：前端 `npx tsc --noEmit`、`vitest run`（**57 文件 407 passed**）及 `npm run build` 全部通过；本轮未重启实机浏览器交互验证。
+
+## 2026-11-23 · Windows 10/11 原生适配（**源码与 macOS 回归闭环，待 Windows 实机验收**）
+
+- **版本基线与影响**：零数据库迁移（维持 `0008_claim_amounts`），兼容现有 macOS 运行环境与数据格式；已同步更新 [README.md](README.md)、[ARCHITECTURE](docs/ARCHITECTURE.md)、[AGENT](docs/AGENT.md)、[BACKUP_RESTORE](docs/BACKUP_RESTORE.md)、[TEST_REPORT](docs/TEST_REPORT.md)、[NEXT_STEPS](docs/NEXT_STEPS.md)、配套 Skill 模板及新增 [WINDOWS_CHECKLIST.md](docs/WINDOWS_CHECKLIST.md)，变更单见 [20261123-Windows适配](docs/changes/20261123-Windows适配.md)。
+- **核心跨平台修复**：
+  - **OCR 超时跨平台**：`parsing/ocr.py` 在 POSIX 主线程保留 `SIGALRM`，在无 `SIGALRM`（Windows）与非主线程下改用守护工作线程限时等待（`threading.Event.wait`），超时统一抛 `TimeoutError`、原业务异常原样传播。
+  - **PostgreSQL 工具探测与区域设置**：`config.py` 新增 `Settings.pg_bin`、`resolve_pg_bin()` 与 `pg_env()`（读取 `.env`/环境变量 `LWB_PG_BIN`，自动探测 Homebrew / `C:\Program Files\PostgreSQL\18\bin` 等路径；Windows 不再强设 `LC_ALL=en_US.UTF-8` 并显式启用 `PGCLIENTENCODING=UTF8` / `PYTHONUTF8=1`）；`backup.py`、`cli.py`、`doctor.py` 统一采用 UTF-8 子进程解码与 `PG_BIN` 解析，`cli.py` 与 `mcp_server.py` 启动时重配标准流为 UTF-8。
+  - **NTFS 路径安全与链接拦截**：`storage.py` 的 `safe_name` 先清理空白与截断后再结合 `ntpath.isreserved()` 拦截 Windows 保留设备名（含 `CON .txt`、`CONIN$`、`COM¹` 等变体）与非法字符；`managed_path`、`verify_backup`、`imports.py`、`materials.py` 拦截反斜杠/盘符越界、统一用 `is_relative_to()` 与 `is_link_or_junction`（覆盖 NTFS 目录 Junction），`app.py` 规范化 `frontend/dist` 校验。
+  - **生命周期与桌面入口**：新增根目录双击启动器 `法律工作台.bat`（CRLF、纯 `goto` 分支避免括号块编码问题、通过 `pythonw.exe` 无黑框拉起）与命令行包装 `scripts/lwb.cmd`；`scripts/lwb` 支持 `.venv` Python 直调、Windows `initdb --locale-provider=builtin --builtin-locale=C.UTF-8`、`SIGBREAK` 清理、`subprocess.run` 替代 `os.execvpe` 及失败命令口令脱敏；`scripts/lwb-launch` 跨平台改用 `msvcrt.locking`（`LK_NBLCK`）、`CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW`、`os.startfile` 与 `MessageBoxW`；语料与验收脚本（`build_corpus.py`、`generate_dossier.py`、`rehearse_backup_restore.py`、`run_acceptance.py`、`generate_protocol.py`）消除 `/tmp`、`rm -rf`、`ps` 与 macOS 专属字体硬编码。
+  - **前端平台提示**：新增 `frontend/src/ui/shortcuts.ts`，界面撤销提示按平台自适应展示 `⌘Z` 或 `Ctrl+Z`，CSS 与 SVG 导出字体栈补充 `"Segoe UI"`，并重编 `frontend/dist`。
+- **验证与已知边界**：
+  - macOS 本机全量后端 **622 passed, 1 skipped**（唯一 skip 为仅限真 Windows 的 `test_real_windows_ntfs_junction_rejected`）、前端 **57 文件 405 passed** + `tsc --noEmit && vite build` 通过、`scripts/lwb doctor` 与 `generate_dossier` PDF 烟测通过；经过两轮独立代码审查并修复全部中/低优先级问题后签收闭环。
+  - **未验证边界**：因当前工作机为 macOS，尚未在真实 Windows 10/11 宿主机执行实机全流程运行，待按 [WINDOWS_CHECKLIST.md](docs/WINDOWS_CHECKLIST.md) 完成真机验收。
+
 ## v0.1.0 (2026-11-23) · 首个开源里程碑发布准备
 
 - **桌面启动器断库恢复修复**：`scripts/lwb` 新增幂等 `start-db` 子命令；`scripts/lwb-launch` 在检测到网页在线（`/api/v1/health` 200）但数据库未就绪（`/api/v1/cases` 失败）时自动执行 `scripts/lwb start-db` 并恢复 `scripts/lwb worker`，拉起失败时立即提示而非空等 45 秒；补充 [test_lwb_launch.py](backend/tests/test_lwb_launch.py) 4 项回归单测。

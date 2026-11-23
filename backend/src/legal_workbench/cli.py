@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from . import analysis, audit, cases, imports, jobs, materials, parsing, search, worker
-from .config import load_settings
+from .config import load_settings, resolve_pg_bin
 from .db import get_engine, get_session_factory
 from .errors import ErrorCode, WorkbenchError
 from .schemas import (ReviewStatus, SearchMode, SearchScope, StatementKind)
@@ -571,10 +571,11 @@ def dispatch(args: argparse.Namespace) -> Any:
             from . import backup
 
             settings = load_settings()
+            pg_bin = resolve_pg_bin(settings=settings)
             result = backup.create_backup(
                 session, _storage(), Path(args.destination),
                 database_url=settings.database_url,
-                pg_bin=os.environ.get("LWB_PG_BIN"))
+                pg_bin=str(pg_bin) if pg_bin else None)
             return {"destination": str(result.destination),
                     "database_sha256": result.database_sha256,
                     "file_count": result.file_count, "total_bytes": result.total_bytes,
@@ -593,10 +594,12 @@ def dispatch(args: argparse.Namespace) -> Any:
 
             from . import backup
 
+            settings = load_settings()
+            pg_bin = resolve_pg_bin(settings=settings)
             result = backup.restore_backup(
                 Path(args.destination), data_root=Path(args.data_root),
-                database_url=load_settings().database_url,
-                pg_bin=os.environ.get("LWB_PG_BIN"))
+                database_url=settings.database_url,
+                pg_bin=str(pg_bin) if pg_bin else None)
             audit.record(session, operation="backup.restore", target_type="backup",
                          target_id=result["database_sha256"], commit=True)
             return result
@@ -969,7 +972,15 @@ def _get_original(session, case_id: uuid.UUID, material_id: uuid.UUID) -> dict[s
     }
 
 
+def _ensure_utf8_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if hasattr(stream, "reconfigure") and (sys.platform == "win32" or encoding != "utf8"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _ensure_utf8_stdio()
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING,
                         format="%(levelname)s %(name)s %(message)s")
     parser = build_parser()

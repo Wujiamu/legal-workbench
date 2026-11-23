@@ -136,14 +136,16 @@ def test_missing_working_file_rejected(db, store, built):
     assert exc.value.code == ErrorCode.INVALID_PATH
 
 
-def test_symlinked_working_file_rejected(db, store, built):
+def test_symlinked_working_file_rejected(db, store, built, tmp_path):
     working_id, relative = materials.create_working_copy(
         db, store, case_id=built["case_id"], file_version_id=built["file_version_id"],
         display_name="编辑稿.txt",
     )
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside", encoding="utf-8")
     path = store.managed_path(relative)
     path.unlink()
-    path.symlink_to("/etc/hosts")
+    factories.symlink_or_skip(path, outside)
     with pytest.raises(WorkbenchError) as exc:
         materials.register_file_version(db, store, case_id=built["case_id"],
                                         working_copy_id=working_id, expected_revision=0)

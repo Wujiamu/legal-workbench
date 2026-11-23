@@ -13,6 +13,7 @@ import { Link, useParams } from 'react-router';
 import { describeError } from '../api/client';
 import { casesApi, materialsApi, progressApi } from '../api/endpoints';
 import type { ProgressSnapshot as ApiSnapshot } from '../api/endpoints';
+import { CaseNavBar } from '../components/CaseNavBar';
 import { ChangeReviewPanel } from './ChangeReviewPanel';
 import { CaseTimePanel } from './CaseTimePanel';
 import { GraphView } from './GraphView';
@@ -20,6 +21,7 @@ import { mapSnapshot } from './httpExecutor';
 import { NodeEditorDialog } from './NodeEditorDialog';
 import { OutlineView } from './OutlineView';
 import { kindLabel } from './rules';
+import { undoShortcutLabel } from '../ui/shortcuts';
 import { activeChildCount, defaultCollapsedIds } from './tree';
 import type {
   CommandResult, ProgressCommand, ProgressNode, ProgressRules, ProgressSnapshot,
@@ -263,6 +265,8 @@ function CaseProgress({ caseId }: { caseId: string }) {
   if (loadError) return <p className="progress-error" role="alert" style={{ margin: 24 }}>错误：{loadError}</p>;
   if (!snapshot || !rules) return <p className="progress-loading">加载中…</p>;
 
+  const undoKey = undoShortcutLabel();
+
   function toggleCollapse(nodeId: string) {
     setCollapsedIds((current) => {
       const next = new Set(current);
@@ -281,15 +285,16 @@ function CaseProgress({ caseId }: { caseId: string }) {
       <header className="app-bar"><div className="app-bar-inner">
         <span className="app-brand">法律工作台</span>
         <span className="app-section">办案进度 · {caseTitle}</span>
+        <Link to="/">← 案件工作表</Link>
       </div></header>
+      <CaseNavBar caseId={caseId} active="progress" />
       <main className="progress-main">
         <div className="page-heading">
           <h1>{caseTitle}</h1>
           <div className="dashboard-actions">
-            <Link to={`/cases/${caseId}?view=overview`} className="time-open-btn">返回案件</Link>
             <button type="button" className="time-open-btn" onClick={() => setShowTime(true)}>工时</button>
             {archivedAt ? null : (
-              <button type="button" onClick={() => { setArchiveError(''); setArchiveOpen(true); }}>
+              <button type="button" className="archive-btn" onClick={() => { setArchiveError(''); setArchiveOpen(true); }}>
                 结案归档
               </button>
             )}
@@ -316,11 +321,11 @@ function CaseProgress({ caseId }: { caseId: string }) {
               <button type="button" onClick={() => setCollapsedIds(new Set())}>展开全部</button>
               <button type="button" onClick={collapseAll}>收起全部</button>
               {undoRef.current.depth('graph') > 0 && archivedAt === null ? (
-                <button type="button" onClick={() => undoZone('graph')} title="撤销本区域最近一步（⌘Z）">
+                <button type="button" onClick={() => undoZone('graph')} title={`撤销本区域最近一步（${undoKey}）`}>
                   撤销（{undoRef.current.depth('graph')}）
                 </button>
               ) : null}
-              <span className="muted">序号 seq={snapshot.seq} · ⌘Z 撤销高亮区域</span>
+              <span className="muted">{undoKey} 撤销高亮区域</span>
             </div>
             {view === 'outline' ? (
               <OutlineView snapshot={snapshot} rules={rules} selectedId={selectedId}

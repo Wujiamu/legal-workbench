@@ -36,8 +36,8 @@
 }
 .progress-add li button { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 6px 10px; border: 0; background: none; cursor: pointer; border-radius: 5px; }
 .progress-add li button:hover { background: #eef3ef; }
-.h-tree { display: flex; align-items: flex-start; gap: 40px; overflow-x: auto; padding: 14px 4px 18px; }
-.h-node { display: flex; align-items: center; }
+.h-tree { display: flex; flex-direction: column; align-items: flex-start; gap: 24px; overflow-x: auto; padding: 14px 4px 18px; scrollbar-gutter: stable; }
+.h-node { display: flex; align-items: center; flex-shrink: 0; }
 .h-node-main { position: relative; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .h-node-links { display: flex; flex-wrap: wrap; gap: 4px; }
 .node-btn { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; max-width: 240px; min-width: 120px; text-align: left; font: inherit; font-size: 12px; padding: 8px 12px; background: var(--surface); border: 1px solid #a7b5aa; border-radius: 8px; cursor: pointer; box-shadow: 0 1px 4px rgb(20 30 25 / 10%); color: var(--ink); }
@@ -125,8 +125,18 @@
 
 /* 确认面板头部与工时面板 */
 .progress-review-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.progress-review-head .work-actions { margin-top: 0; }
+.progress-review-head .work-actions button {
+  font: inherit; font-size: 12px; cursor: pointer; border: 1px solid #a7b5aa;
+  background: var(--surface); color: var(--ink); border-radius: 5px; padding: 4px 10px;
+}
+.progress-review-head .work-actions button:disabled { opacity: .55; cursor: not-allowed; }
 /* 工时改为按钮触发弹窗（用户反馈第十轮），不再常驻侧栏 */
-.time-open-btn { font: inherit; font-size: 14px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.time-open-btn {
+  display: inline-flex; align-items: center; text-decoration: none;
+  font: inherit; font-size: 14px; padding: 8px 14px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink);
+}
 .time-open-btn:hover { border-color: var(--accent); color: var(--accent); }
 .time-dialog { width: min(560px, 92vw); max-height: 86vh; overflow: auto; }
 .time-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }

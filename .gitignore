@@ -40,8 +40,9 @@ frontend/node_modules/
 frontend/dist/
 .vite/
 
-# 本机验收证据、历史规则备份与设计访谈临时产物（不随开源仓库发布）
+# 本机验收证据、历史规则备份、视频演示工程与设计访谈临时产物（不随开源仓库发布）
 .impeccable/
+demo-video/
 docs/backups/
 docs/reports/
 

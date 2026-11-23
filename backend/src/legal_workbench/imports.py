@@ -18,7 +18,7 @@ from .config import Settings, load_settings
 from .db import begin_exclusive, begin_write
 from .errors import ErrorCode, WorkbenchError
 from .schemas import IntakeItem, IntakeStatus, ListIntakeItemsOutput
-from .storage import StagedFile, Storage, safe_name
+from .storage import StagedFile, Storage, is_link_or_junction, safe_name
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def resolve_source(source_path: str, settings: Settings | None = None) -> tuple[
     candidate = Path(source_path).expanduser()
     if not candidate.is_absolute():
         raise WorkbenchError(ErrorCode.INVALID_PATH, "导入来源必须是绝对路径")
-    if candidate.is_symlink():
+    if is_link_or_junction(candidate):
         raise WorkbenchError(ErrorCode.INVALID_PATH, "不接受符号链接来源", {"path": str(candidate)})
     try:
         resolved = candidate.resolve(strict=True)
@@ -89,7 +89,7 @@ def scan_source(source: Path, base_root: Path) -> list[tuple[str, Path | None, s
         return [(source.relative_to(base_root).as_posix(), source, None)]
     entries: list[tuple[str, Path | None, str | None]] = []
     for current, dirs, files in os.walk(source, followlinks=False):
-        skipped_dirs = [d for d in dirs if _is_junk(d) or (Path(current) / d).is_symlink()]
+        skipped_dirs = [d for d in dirs if _is_junk(d) or is_link_or_junction(Path(current) / d)]
         dirs[:] = sorted(d for d in dirs if d not in skipped_dirs)
         for name in sorted(skipped_dirs):
             path = Path(current) / name
@@ -100,7 +100,7 @@ def scan_source(source: Path, base_root: Path) -> list[tuple[str, Path | None, s
             relative = path.relative_to(base_root).as_posix()
             if _is_junk(name):
                 entries.append((relative, None, "ignored_system_file"))
-            elif path.is_symlink():
+            elif is_link_or_junction(path):
                 entries.append((relative, None, "symlink_skipped"))
             elif not path.is_file():
                 entries.append((relative, None, "not_a_regular_file"))

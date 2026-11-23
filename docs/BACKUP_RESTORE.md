@@ -18,7 +18,7 @@ cd backend
   --data-root /Volumes/新盘/lwb-data
 ```
 
-`pg_dump` / `pg_restore` 由 `LWB_PG_BIN` 或 PATH 解析；缺失时报 `dependency_missing`。
+`pg_dump` / `pg_restore` 由 `LWB_PG_BIN`、系统 PATH 或平台标准目录（macOS Homebrew / Windows `C:\Program Files\PostgreSQL\18\bin`）解析；缺失时报 `dependency_missing`。Windows 下 `DATA_ROOT` 须位于 NTFS 分区（支持同卷 `os.link`）。
 
 ## 备份做了什么
 
@@ -54,8 +54,9 @@ cd backend
 如果备份进程被强杀，数据库会停在 `maintenance_state.active = true`，服务拒绝一切写入。先确认没有备份仍在运行：
 
 ```sh
-ps aux | grep -c "[l]wb.*backup"
-ls /目标备份目录/INCOMPLETE   # 存在说明该次备份未完成，不可恢复
+ps aux | grep -c "[l]wb.*backup"          # macOS / Linux
+# tasklist | findstr /I python            # Windows（确认无备份脚本仍在运行）
+ls /目标备份目录/INCOMPLETE               # 存在说明该次备份未完成，不可恢复
 ```
 
 确认无备份进程后：
@@ -63,6 +64,7 @@ ls /目标备份目录/INCOMPLETE   # 存在说明该次备份未完成，不可
 ```sh
 .venv/bin/python -m legal_workbench.cli clear-maintenance
 .venv/bin/python -m legal_workbench.cli check-consistency
+# Windows 请使用 .venv\Scripts\python.exe
 ```
 
 `check-consistency` 是只读检查：核对数据库引用、文件存在与哈希、孤立文件、staging 记录。`repair-consistency` 只完成**已有数据库记录支持**的未完成发布（`published` 状态的导入项、有哈希一致暂存副本的缺失对象），绝不猜测某个文件属于哪个案件。

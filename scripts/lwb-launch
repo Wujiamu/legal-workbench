@@ -1,24 +1,126 @@
 """Launch the local service once, then open it in the default browser."""
+from contextlib import contextmanager
 from datetime import datetime
-import fcntl
+import os
 from pathlib import Path
 import subprocess
 import sys
 import time
 from urllib.error import URLError
 from urllib.request import ProxyHandler, build_opener
-
-from legal_workbench.config import load_settings
+import webbrowser
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend" / "src"))
+
+from legal_workbench.config import _is_windows, load_settings  # noqa: E402
+
 RUNTIME = ROOT / "var" / "runtime"
 LOG = RUNTIME / "launcher.log"
+
+
+def _is_macos() -> bool:
+    return sys.platform == "darwin"
+
+
+def _ensure_utf8_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if hasattr(stream, "reconfigure") and (sys.platform == "win32" or encoding != "utf8"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def log(message):
     with LOG.open("a", encoding="utf-8") as output:
         print(f"{datetime.now().astimezone().isoformat(timespec='seconds')} {message}",
               file=output)
+
+
+@contextmanager
+def _exclusive_lock(lock_path: Path, *, timeout_seconds: float = 60.0):
+    if _is_windows():
+        import msvcrt
+
+        with lock_path.open("a+b") as lock:
+            lock.seek(0, os.SEEK_END)
+            if lock.tell() == 0:
+                lock.write(b"\0")
+                lock.flush()
+            deadline = time.monotonic() + timeout_seconds
+            while True:
+                lock.seek(0)
+                try:
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("等待启动锁超时")
+                    time.sleep(0.1)
+            try:
+                yield
+            finally:
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        with lock_path.open("a", encoding="utf-8") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            yield
+
+
+def _spawn_kwargs() -> dict:
+    env = dict(os.environ)
+    if _is_windows():
+        env.setdefault("LWB_BACKGROUND", "1")
+        env.setdefault("PYTHONUTF8", "1")
+        flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        return {"creationflags": flags, "env": env}
+    return {"start_new_session": True, "env": env}
+
+
+def _run_kwargs() -> dict:
+    env = dict(os.environ)
+    if _is_windows():
+        env.setdefault("LWB_BACKGROUND", "1")
+        env.setdefault("PYTHONUTF8", "1")
+        return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0), "env": env}
+    return {"env": env}
+
+
+def _default_open_browser(url: str) -> None:
+    if _is_macos():
+        subprocess.run(["/usr/bin/open", url], check=True)
+    elif _is_windows():
+        os.startfile(url)  # type: ignore[attr-defined]
+    else:
+        if not webbrowser.open(url):
+            raise RuntimeError(f"无法打开浏览器访问 {url}")
+
+
+def _notify_failure(message: str, log_path: Path) -> None:
+    if _is_macos():
+        try:
+            subprocess.run(
+                ["/usr/bin/osascript", "-e", "on run argv", "-e",
+                 'display alert "无法启动法律工作台" message (item 1 of argv) as critical',
+                 "-e", "end run", message],
+                check=True, capture_output=True, timeout=10)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            subprocess.run(["/usr/bin/open", "-t", str(log_path)], check=False)
+        return
+    if _is_windows():
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, message, "无法启动法律工作台", 0x10)
+            return
+        except Exception:
+            if log_path.exists():
+                try:
+                    os.startfile(str(log_path))  # type: ignore[attr-defined]
+                except OSError:
+                    pass
+    print(message, file=sys.stderr)
 
 
 def open_workbench(
@@ -31,7 +133,7 @@ def open_workbench(
     monotonic_fn=None,
 ):
     settings = load_settings()
-    if not (ROOT / "frontend/dist/index.html").is_file():
+    if not (ROOT / "frontend" / "dist" / "index.html").is_file():
         raise RuntimeError("网页文件尚未构建，请按 README 完成安装。")
     RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
     base = f"http://127.0.0.1:{settings.port}"
@@ -54,14 +156,12 @@ def open_workbench(
     probe = probe_fn or _default_probe
     run_cmd = run_fn or subprocess.run
     popen_cmd = popen_fn or subprocess.Popen
-    open_browser = open_browser_fn or (
-        lambda url: subprocess.run(["/usr/bin/open", url], check=True)
-    )
+    open_browser = open_browser_fn or _default_open_browser
     sleep = sleep_fn or time.sleep
     monotonic = monotonic_fn or time.monotonic
+    lwb_script = str(ROOT / "scripts" / "lwb")
 
-    with (RUNTIME / "launcher.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with _exclusive_lock(RUNTIME / "launcher.lock"):
         running, ready = probe()
         service_process = None
         recovered_db = False
@@ -69,24 +169,24 @@ def open_workbench(
             log("正在启动工作台服务")
             with LOG.open("ab") as output:
                 service_process = popen_cmd(
-                    [sys.executable, str(ROOT / "scripts/lwb"), "start"],
+                    [sys.executable, lwb_script, "start"],
                     cwd=ROOT, stdin=subprocess.DEVNULL, stdout=output,
-                    stderr=subprocess.STDOUT, start_new_session=True)
+                    stderr=subprocess.STDOUT, **_spawn_kwargs())
         elif not ready:
             log("发现已运行的工作台服务但数据库未就绪，尝试拉起 PostgreSQL 并恢复解析 worker")
             with LOG.open("ab") as output:
                 db_result = run_cmd(
-                    [sys.executable, str(ROOT / "scripts/lwb"), "start-db"],
+                    [sys.executable, lwb_script, "start-db"],
                     cwd=ROOT, stdin=subprocess.DEVNULL, stdout=output,
-                    stderr=subprocess.STDOUT, check=False)
+                    stderr=subprocess.STDOUT, check=False, **_run_kwargs())
             if db_result.returncode != 0:
                 raise RuntimeError("数据库未就绪，自动拉起 PostgreSQL 失败，请检查启动日志。")
             recovered_db = True
             with LOG.open("ab") as output:
                 popen_cmd(
-                    [sys.executable, str(ROOT / "scripts/lwb"), "worker"],
+                    [sys.executable, lwb_script, "worker"],
                     cwd=ROOT, stdin=subprocess.DEVNULL, stdout=output,
-                    stderr=subprocess.STDOUT, start_new_session=True)
+                    stderr=subprocess.STDOUT, **_spawn_kwargs())
         else:
             log("发现已运行的工作台服务")
         deadline = monotonic() + 45
@@ -103,6 +203,7 @@ def open_workbench(
 
 
 if __name__ == "__main__":
+    _ensure_utf8_stdio()
     try:
         open_workbench()
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
@@ -111,12 +212,5 @@ if __name__ == "__main__":
         except OSError:
             pass
         message = f"{exc}\n\n启动日志：{LOG}"
-        try:
-            subprocess.run(
-                ["/usr/bin/osascript", "-e", "on run argv", "-e",
-                 'display alert "无法启动法律工作台" message (item 1 of argv) as critical',
-                 "-e", "end run", message],
-                check=True, capture_output=True, timeout=10)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            subprocess.run(["/usr/bin/open", "-t", str(LOG)], check=False)
+        _notify_failure(message, LOG)
         sys.exit(1)

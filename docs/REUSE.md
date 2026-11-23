@@ -75,6 +75,6 @@ OCR 模型文件（`det.onnx`、`rec.onnx`、`cls.onnx`）由 `scripts/install_o
 
 ## 系统依赖
 
-- PostgreSQL 18（PostgreSQL License），Homebrew 安装于 `/opt/homebrew/opt/postgresql@18/bin`。
+- PostgreSQL 18（PostgreSQL License），macOS Homebrew 安装于 `/opt/homebrew/opt/postgresql@18/bin`，Windows 默认安装于 `C:\Program Files\PostgreSQL\18\bin`（均支持 `LWB_PG_BIN` 与 `PATH` 解析）。
 - Python 3.13。前端构建与测试使用 npm，Node.js 版本范围见 [前端清单](../frontend/package.json)。
-- macOS 系统字体（`Hiragino Sans GB`）仅用于测试中生成合成扫描件，不参与生产解析路径。
+- 系统字体（macOS `Hiragino Sans GB` / Windows 微软雅黑 `msyh.ttc` / 黑体 `simhei.ttf` / 宋体 `simsun.ttc` / Linux Noto CJK）仅用于测试及仿真样本生成，不参与生产解析路径。

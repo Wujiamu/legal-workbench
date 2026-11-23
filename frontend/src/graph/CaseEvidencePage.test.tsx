@@ -170,7 +170,7 @@ describe('真实案件证据目录页', () => {
     expect(parseButton.disabled).toBe(true);
 
     await userEvent.selectOptions(
-      within(panel).getByLabelText(/导入材料（import_material_id）/), 'mat-cat');
+      within(panel).getByLabelText('导入材料'), 'mat-cat');
     expect(parseButton.disabled).toBe(false);
     await userEvent.click(parseButton);
 

@@ -11,6 +11,8 @@ from legal_workbench import storage as storage_module
 from legal_workbench.errors import ErrorCode, WorkbenchError
 from legal_workbench.storage import Storage, safe_extension, safe_name
 
+from . import factories
+
 
 @pytest.fixture
 def store(tmp_path) -> Storage:
@@ -74,14 +76,18 @@ def test_path_traversal_rejected(store, relative):
 def test_symlink_component_rejected(store, tmp_path):
     case_id = uuid.uuid4()
     store.case_dir(case_id)
+    outside_dir = tmp_path / "outside-dir"
+    outside_dir.mkdir()
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("outside", encoding="utf-8")
     link = store.root / "cases" / str(case_id) / "linkdir"
-    link.symlink_to("/tmp")
+    factories.symlink_or_skip(link, outside_dir, target_is_directory=True)
     with pytest.raises(WorkbenchError) as exc:
         store.managed_path(f"cases/{case_id}/linkdir/file.txt")
     assert exc.value.code == ErrorCode.INVALID_PATH
     final = store.root / "cases" / str(case_id) / "working" / "w1" / "alias.txt"
     final.parent.mkdir(parents=True)
-    final.symlink_to("/etc/hosts")
+    factories.symlink_or_skip(final, outside_file)
     with pytest.raises(WorkbenchError):
         store.managed_path(f"cases/{case_id}/working/w1/alias.txt")
 

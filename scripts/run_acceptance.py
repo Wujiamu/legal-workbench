@@ -12,6 +12,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -30,12 +31,12 @@ from sqlalchemy.engine import make_url  # noqa: E402
 from build_corpus import build_functional_corpus, build_performance_corpus  # noqa: E402
 from legal_workbench import (analysis, backup, cases, consistency, imports, jobs,  # noqa: E402
                             materials, models, parsing, search, worker)
-from legal_workbench.config import load_settings  # noqa: E402
+from legal_workbench.config import load_settings, pg_env, resolve_pg_bin  # noqa: E402
 from legal_workbench.db import configure_engine, get_engine, get_session_factory, reset_engine  # noqa: E402
 from legal_workbench.schemas import ReviewStatus, SearchMode, SearchScope, StatementKind  # noqa: E402
 from legal_workbench.storage import Storage  # noqa: E402
 
-WORK = Path("/tmp/lwb-acceptance")
+WORK = Path(tempfile.gettempdir()) / "lwb-acceptance"
 SOURCE = WORK / "source"
 PERF_SOURCE = WORK / "perf-source"
 DATA = WORK / "data"
@@ -73,9 +74,10 @@ def recreate_databases(names: list[str]) -> None:
 
 
 def migrate(migration_url: str) -> None:
-    env = dict(os.environ, LWB_MIGRATION_URL=migration_url, LC_ALL="en_US.UTF-8")
+    env = pg_env(extra={"LWB_MIGRATION_URL": migration_url})
     result = subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"],
-                            cwd=ROOT / "backend", env=env, capture_output=True, text=True)
+                            cwd=ROOT / "backend", env=env, capture_output=True, text=True,
+                            encoding="utf-8", errors="replace")
     if result.returncode != 0:
         raise RuntimeError(f"migration failed: {result.stderr[-1500:]}")
 
@@ -284,8 +286,10 @@ def main() -> int:
     say("## 8. 备份")
     say()
     started = time.time()
+    pg_bin_path = resolve_pg_bin(settings=settings)
+    pg_bin = str(pg_bin_path) if pg_bin_path else None
     result = backup.create_backup(session, store, BACKUP_DIR, database_url=func_app,
-                                  pg_bin=os.environ.get("LWB_PG_BIN"))
+                                  pg_bin=pg_bin)
     say(f"备份耗时 {time.time() - started:.1f}s，文件 {result.file_count} 个，"
         f"{result.total_bytes} 字节，complete={result.complete}")
     manifest = backup.verify_backup(BACKUP_DIR)
@@ -298,7 +302,7 @@ def main() -> int:
     restore_url = url_for(settings.migration_url, FUNC_RESTORE_DB)
     restore_report = backup.restore_backup(BACKUP_DIR, data_root=RESTORED_DATA,
                                            database_url=restore_url,
-                                           pg_bin=os.environ.get("LWB_PG_BIN"))
+                                           pg_bin=pg_bin)
     say(f"恢复文件 {restore_report['restored_files']} 个，schema {restore_report['schema_version']}")
     reset_engine()
     configure_engine(url_for(settings.database_url, FUNC_RESTORE_DB))
@@ -363,7 +367,7 @@ def main() -> int:
     # uvicorn 绑定失败后健康检查会命中正式服务，后续 HTTP 实际打到生产库。
     # 这里显式取一个空闲端口，并让子进程的安全校验（allowed_hosts）用同一端口。
     port = int(os.environ.get("LWB_ACCEPTANCE_PORT", "0")) or _free_port()
-    server_env = dict(os.environ, LC_ALL="en_US.UTF-8", LWB_PORT=str(port))
+    server_env = pg_env(extra={"LWB_PORT": str(port)})
     server = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "legal_workbench.app:app",
          "--host", "127.0.0.1", "--port", str(port), "--no-access-log"],
@@ -645,14 +649,41 @@ def main() -> int:
     from legal_workbench.parsing.pdf import iter_pdf_units
 
     def _rss_mb() -> float:
+        if os.name == "nt":
+            try:
+                import ctypes
+                from ctypes import wintypes
+
+                class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+                    _fields_ = [
+                        ("cb", wintypes.DWORD),
+                        ("PageFaultCount", wintypes.DWORD),
+                        ("PeakWorkingSetSize", ctypes.c_size_t),
+                        ("WorkingSetSize", ctypes.c_size_t),
+                        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                        ("PagefileUsage", ctypes.c_size_t),
+                        ("PeakPagefileUsage", ctypes.c_size_t),
+                    ]
+
+                counters = PROCESS_MEMORY_COUNTERS()
+                counters.cb = ctypes.sizeof(counters)
+                handle = ctypes.windll.kernel32.GetCurrentProcess()
+                if ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+                    return counters.WorkingSetSize / (1024 * 1024)
+            except Exception:
+                return 0.0
+            return 0.0
         # ru_maxrss is a *high-water mark*: reading it before and after an OCR run
         # in the same process always reports a 0 delta once anything peaked
         # earlier.  Use the live RSS from ps instead.
-        out = subprocess.run(["ps", "-o", "rss=", "-p", str(os.getpid())],
-                             capture_output=True, text=True)
         try:
+            out = subprocess.run(["ps", "-o", "rss=", "-p", str(os.getpid())],
+                                 capture_output=True, text=True)
             return int(out.stdout.strip()) / 1024
-        except (TypeError, ValueError):
+        except (OSError, TypeError, ValueError):
             return 0.0
 
     baseline_rss = _rss_mb()

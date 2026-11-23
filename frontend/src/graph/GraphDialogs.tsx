@@ -6,6 +6,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
 import { entityKindLabel, relationKindLabel } from './rules';
+import { undoShortcutLabel } from '../ui/shortcuts';
 import type {
   CanvasGroup, CaseEntity, CaseRelation, CommandResult, Credibility, GraphCommand,
   GraphCommandRunner, GraphRules, GraphSnapshot, RelationAttrs, SourceRef,
@@ -687,7 +688,7 @@ export function DeleteDialog({ kind, name, loadImpact, onClose, onConfirm }: {
           </p>
         )
       ) : null}
-      <p className="muted">删除写入变更记录，可用撤销（⌘Z）恢复；已有快照的图不能删除。</p>
+      <p className="muted">删除写入变更记录，可用撤销（{undoShortcutLabel()}）恢复；已有快照的图不能删除。</p>
       {error ? <p role="alert" className="graph-error-inline">错误：{error}</p> : null}
       <div className="work-actions">
         <button type="button" onClick={onClose}>取消</button>

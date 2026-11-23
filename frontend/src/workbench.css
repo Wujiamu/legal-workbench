@@ -3,7 +3,7 @@
   --page-background: #f7f7f5;
   --page-text: #1f1e1c;
   --field-muted: #6b6862;
-  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
   --ink: #202c29;
   --muted: #53635c;
@@ -257,8 +257,9 @@ a { color: var(--accent); text-underline-offset: .18em; }
   .timeline-empty, .timeline-note { margin: 12px 14px; }
 }
 
-/* 案件页签里的可视化入口（关系图 / 证据目录 / 诉请金额）是独立全页视图，样式与按钮页签一致。 */
+/* 案件页签里的可视化入口（办案进度 / 关系图 / 证据目录 / 诉请金额）是独立全页视图，样式与按钮页签一致。 */
 .workspace-tabs a { cursor: pointer; font: inherit; font-size: 14px; color: var(--muted); text-decoration: none; padding: 10px 8px; border-bottom: 2px solid transparent; }
+.workspace-tabs a[aria-current=page] { color: var(--shell); border-color: var(--accent); font-weight: 650; }
 .workspace-tabs a:hover { color: var(--ink); background: #eef3ef; }
 
 /* 原生模态滚动隔离与跨页面共用的对话框/表单提示样式（覆盖 SendToGraphDialog 与 ChartExportDialog）。 */

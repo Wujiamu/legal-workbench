@@ -5,6 +5,8 @@ import { Link, useParams } from 'react-router';
 import { describeError } from '../api/client';
 import { casesApi, materialsApi, searchApi } from '../api/endpoints';
 import type { CaseOverview, CorpusCoverageMatrixOut, Coverage, MaterialSummary } from '../api/endpoints';
+import { CaseNavBar, isWorkspaceTab } from '../components/CaseNavBar';
+import type { WorkspaceTab } from '../components/CaseNavBar';
 import { CaseOverviewPanel } from '../components/CaseOverview';
 import { AnnotationPanel } from '../components/Annotations';
 import { COVERAGE_STATUSES, CoverageMatrix } from '../components/CoverageMatrix';
@@ -17,7 +19,13 @@ import { formatTimestamp } from '../ui/time';
 import { palette, radius, spacing, fontStack } from '../ui/tokens';
 
 const PAGE_SIZE = 50;
-type Tab = 'overview' | 'material' | 'search' | 'analysis' | 'annotations';
+type Tab = WorkspaceTab;
+
+function resolveTab(params: URLSearchParams): Tab {
+  if (params.get('ref')) return 'search';
+  const view = params.get('view');
+  return isWorkspaceTab(view) ? view : 'material';
+}
 
 export function coverageLabel(coverage: Coverage): string {
   const parts: string[] = [];
@@ -65,10 +73,16 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
   const [showUpload, setShowUpload] = useState(false);
   // A `?ref=` link points at a source excerpt; opening the page must land on the
   // search tab, otherwise the parameter is honoured only after a manual tab click.
-  const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<Tab>(searchParams.get('ref') ? 'search' : searchParams.get('view') === 'overview' ? 'overview' : 'material');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => resolveTab(searchParams));
   const [visitedSearch, setVisitedSearch] = useState(tab === 'search');
   useEffect(() => { if (tab === 'search') setVisitedSearch(true); }, [tab]);
+  useEffect(() => {
+    const view = searchParams.get('view');
+    if (!searchParams.get('ref') && isWorkspaceTab(view)) {
+      setTab((current) => (current === view ? current : view));
+    }
+  }, [searchParams]);
   const [overview, setOverview] = useState<CaseOverview | null>(null);
   const [overviewError, setOverviewError] = useState('');
   const [reloadOverview, setReloadOverview] = useState(0);
@@ -95,6 +109,12 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     if (next === tab) return;
     verticalPositions.current[tab] = window.scrollY;
     setTab(next);
+    setSearchParams((current) => {
+      const nextParams = new URLSearchParams(current);
+      nextParams.set('view', next);
+      if (next !== 'search') nextParams.delete('ref');
+      return nextParams;
+    }, { replace: true });
   }
 
   const [focus, setFocus] = useState<{ analysisId: string; versionId: string } | null>(null);
@@ -173,22 +193,26 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
         <Link to="/" className="back-link">← 案件工作表</Link>
         <h1 title={overview?.title}>{overview?.title ?? '案件工作区'}</h1>
       </div></header>
-      <div className="workspace-toolbar">
-        <nav aria-label="案件工作区" className="workspace-tabs">
-          {([['overview', '案件概览'], ['material', '材料'], ['search', '检索'],
-            ['analysis', '分析'], ['annotations', '标注复核']] as const).map(([key, label]) => (
-            <button key={key} type="button" aria-current={tab === key ? 'page' : undefined}
-                    onClick={() => switchTab(key)}>{label}</button>
-          ))}
-          {/* 可视化页签是独立全页视图：保留案件 UUID，互相跳转不丢案件上下文。 */}
+      <CaseNavBar
+        caseId={caseId}
+        active={tab}
+        onSwitchWorkspaceTab={switchTab}
+        rightSlot={
+          <Button variant="quiet" disabled={archived} onClick={() => { if (!archived) setShowUpload((value) => !value); }}>
+            {showUpload && !archived ? '收起导入' : '导入材料'}
+          </Button>
+        }
+      />
+
+      {archived ? (
+        <p role="status" className="graph-archived" style={{ margin: '10px 16px 0' }}>
+          本案已归档：材料、概览、分析与标注只读；查看、检索与导出仍可用。如需修改请前往
+          <Link to={`/cases/${caseId}/progress`}>办案进度</Link>
+          或
           <Link to={`/cases/${caseId}/graph`}>关系图</Link>
-          <Link to={`/cases/${caseId}/evidence`}>证据目录</Link>
-          <Link to={`/cases/${caseId}/claims`}>诉请金额</Link>
-        </nav>
-        <Button variant="quiet" disabled={archived} onClick={() => { if (!archived) setShowUpload((value) => !value); }}>
-          {showUpload && !archived ? '收起导入' : '导入材料'}
-        </Button>
-      </div>
+          取消归档。
+        </p>
+      ) : null}
 
       {error && tab === 'material' ? <div style={{ padding: spacing.md }}><ErrorState message={error} onRetry={refresh} /></div> : null}
 

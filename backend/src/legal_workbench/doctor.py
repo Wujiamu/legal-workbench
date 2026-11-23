@@ -1,9 +1,10 @@
 """Read-only diagnostics except for a temporary data-directory write probe."""
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
-from .config import load_settings
+from .config import load_settings, resolve_pg_bin
 
 CLEAR_MAINTENANCE = (
     "python -m legal_workbench.cli clear-maintenance"
@@ -35,6 +36,10 @@ def _report_maintenance(settings) -> tuple[bool, str]:
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if hasattr(stream, "reconfigure") and (sys.platform == "win32" or encoding != "utf8"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     settings = load_settings()
     ok = True
     def report(label: str, passed: bool, detail: str) -> None:
@@ -42,10 +47,19 @@ def main() -> int:
         print(f"{'OK' if passed else 'MISSING'} {label}: {detail}")
         ok &= passed
     report("Python", sys.version_info[:2] == (3, 13), sys.version.split()[0])
+    win_kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
     for name in ("node", "npm"):
         path = shutil.which(name)
-        version = subprocess.run([path, "--version"], capture_output=True, text=True).stdout.strip() if path else "not found"
+        version = (
+            subprocess.run(
+                [path, "--version"], capture_output=True, text=True,
+                encoding="utf-8", errors="replace", **win_kwargs,
+            ).stdout.strip()
+            if path else "not found"
+        )
         report(name, bool(path and version), version)
+    pg_bin = resolve_pg_bin(settings=settings)
+    report("PG_BIN", bool(pg_bin), str(pg_bin) if pg_bin else "not found (install PostgreSQL 18 or set LWB_PG_BIN)")
     try:
         with tempfile.TemporaryFile(dir=settings.data_root):
             pass

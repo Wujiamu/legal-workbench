@@ -158,7 +158,7 @@ describe('关系图原型 · 证据目录', () => {
       expect(label?.textContent).toContain('证据1-2 第2页');
     }, { timeout: 10000 });
 
-    await userEvent.click(screen.getByRole('button', { name: '撤销（⌘Z）' }));
+    await userEvent.click(screen.getByRole('button', { name: /^撤销（(⌘Z|Ctrl\+Z)）$/ }));
     await waitFor(() => {
       expect(evidenceRow('TEST-ONLY 股权转让协议').textContent).toContain('证据1-1');
     });

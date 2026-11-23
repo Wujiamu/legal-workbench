@@ -16,6 +16,7 @@
  */
 import { computeEvidenceNumbers, resolveAllSources, resolveSource } from './evidence';
 import { buildSnapshotPayload, pendingChangesInGraph } from './model';
+import { undoShortcutLabel } from '../ui/shortcuts';
 import type {
   Actor, Annotation, AuditEntry, CaseEntity, CaseRelation, ChangeDiffEntry, CommandResult,
   ConsentAction, Credibility, DiffTarget, EntityAlias, EntityChanges, Entry,
@@ -1543,7 +1544,7 @@ export function createLocalGraphExecutor(options: LocalExecutorOptions): GraphEx
       + (restoredSources > 0 ? `、补回 ${restoredSources} 条出处` : '')
       + (skipped > 0 ? `；跳过 ${skipped} 条已不存在的引用` : '')
       + (downgraded > 0 ? `；${downgraded} 条关系因出处材料不存在已降级为待查` : '')
-      + '。可用撤销（⌘Z）回到恢复前。');
+      + `。可用撤销（${undoShortcutLabel()}）回到恢复前。`);
   }
 
   function addSnapshotConsent(command: Extract<GraphCommand, { type: 'add_snapshot_consent' }>,

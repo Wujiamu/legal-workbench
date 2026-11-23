@@ -8,8 +8,10 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import date
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -19,7 +21,7 @@ import psycopg  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 
 from legal_workbench import analysis, backup, cases, consistency, imports, parsing, search, time_entries, worker  # noqa: E402
-from legal_workbench.config import load_settings  # noqa: E402
+from legal_workbench.config import load_settings, pg_env, resolve_pg_bin  # noqa: E402
 from legal_workbench.db import configure_engine, get_engine, get_session_factory  # noqa: E402
 from legal_workbench.schemas import (AddTimeEntryInput, ArchiveCaseInput, SearchMode,
                                      StatementKind)  # noqa: E402
@@ -27,7 +29,7 @@ from legal_workbench.storage import Storage  # noqa: E402
 
 SCRATCH_DB = "legal_workbench_rehearsal"
 RESTORE_DB = "legal_workbench_rehearsal_restored"
-WORK = pathlib.Path("/tmp/lwb-rehearsal")
+WORK = pathlib.Path(tempfile.gettempdir()) / "lwb-rehearsal"
 SOURCE = WORK / "source"
 DATA = WORK / "data"
 BACKUP = WORK / "backup"
@@ -45,7 +47,7 @@ def main() -> int:
     scratch_app_url = make_url_for(settings.database_url, SCRATCH_DB)
     restore_url = make_url_for(settings.migration_url, RESTORE_DB)
 
-    subprocess.run(["rm", "-rf", str(WORK)], check=True)
+    shutil.rmtree(WORK, ignore_errors=True)
     SOURCE.mkdir(parents=True)
     (SOURCE / "虚构合同.txt").write_bytes(
         "TEST-ONLY 合同约定金额100元。\n\n第二段：交付期限为2024年1月1日。".encode())
@@ -56,9 +58,10 @@ def main() -> int:
             conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
             conn.execute(f'CREATE DATABASE "{name}"')
 
-    env = dict(os.environ, LWB_MIGRATION_URL=scratch_url, LC_ALL="en_US.UTF-8")
+    env = pg_env(extra={"LWB_MIGRATION_URL": scratch_url})
     migrated = subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"],
-                              cwd=ROOT / "backend", env=env, capture_output=True, text=True)
+                              cwd=ROOT / "backend", env=env, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
     if migrated.returncode != 0:
         print("migration failed:", migrated.stderr[-800:])
         return 1
@@ -109,9 +112,11 @@ def main() -> int:
           "issues =", len(consistency_before.issues),
           "orphans =", len(consistency_before.orphan_files))
 
+    pg_bin_path = resolve_pg_bin(settings=settings)
+    pg_bin = str(pg_bin_path) if pg_bin_path else None
     result = backup.create_backup(session, storage, BACKUP,
                                   database_url=scratch_app_url,
-                                  pg_bin=os.environ.get("LWB_PG_BIN"))
+                                  pg_bin=pg_bin)
     print("BACKUP:", json.dumps({"files": result.file_count, "bytes": result.total_bytes,
                                  "db_sha256": result.database_sha256[:16],
                                  "complete": result.complete}, ensure_ascii=False))
@@ -121,7 +126,7 @@ def main() -> int:
 
     report = backup.restore_backup(BACKUP, data_root=RESTORED_DATA,
                                    database_url=restore_url,
-                                   pg_bin=os.environ.get("LWB_PG_BIN"))
+                                   pg_bin=pg_bin)
     print("RESTORE:", json.dumps(report, ensure_ascii=False))
 
     with psycopg.connect(restore_url) as conn:

@@ -2,13 +2,26 @@
 from __future__ import annotations
 
 import hashlib
+import os
+from pathlib import Path
 import uuid
 from typing import Any
 
+import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from legal_workbench import models
+
+
+def symlink_or_skip(link: Path, target: Path | str, *, target_is_directory: bool = False) -> None:
+    """Create a symlink, skipping only on unprivileged Windows lacking symlink rights."""
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except OSError as exc:
+        if os.name == "nt" and getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows 当前账户无创建符号链接权限（需开发者模式或管理员权限）")
+        raise
 
 
 def sha256_of(content: bytes) -> str:

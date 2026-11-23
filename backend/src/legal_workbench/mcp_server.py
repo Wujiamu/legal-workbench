@@ -24,6 +24,11 @@ from .schemas import (CreateAnnotationInput, ListAnnotationsInput, ReviewStatus,
                       RemoveRelationInput, SetActiveStageInput, UnlinkInput, UpdateNodeInput)
 from .storage import Storage
 
+if hasattr(sys.stderr, "reconfigure") and (
+    sys.platform == "win32" or (getattr(sys.stderr, "encoding", None) or "").lower().replace("-", "") != "utf8"
+):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 logging.basicConfig(stream=sys.stderr, level=logging.WARNING,
                     format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("legal_workbench.mcp")

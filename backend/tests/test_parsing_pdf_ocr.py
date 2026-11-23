@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import dataclasses
+import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -21,7 +24,17 @@ from legal_workbench.parsing.ocr import MANIFEST, model_dir
 from legal_workbench.parsing.pdf import parse_pdf
 
 ROOT = Path(__file__).resolve().parents[2]
-FONT = "/System/Library/Fonts/Hiragino Sans GB.ttc"
+_WIN_FONTS = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+_FONT_CANDIDATES = (
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    str(_WIN_FONTS / "msyh.ttc"),
+    str(_WIN_FONTS / "simhei.ttf"),
+    str(_WIN_FONTS / "simsun.ttc"),
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+)
+FONT = next((p for p in _FONT_CANDIDATES if Path(p).is_file()), "")
 pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
 
 
@@ -35,7 +48,7 @@ def ensure_models():
 def _text_image(text: str, size=(1240, 600)) -> Image.Image:
     image = Image.new("RGB", size, "white")
     draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype(FONT, 56)
+    font = ImageFont.truetype(FONT, 56) if FONT else ImageFont.load_default()
     draw.text((40, 60), text, font=font, fill="black")
     return image
 
@@ -169,11 +182,15 @@ class _WrappingEngine:
         if self.spin:
             # The SIGALRM handler raises TimeoutError mid-loop; this except is
             # exactly what the library does before raising its own error type.
+            # On Windows (thread timeout fallback), avoid spinning CPU indefinitely.
+            deadline = time.monotonic() + 2.0
             try:
-                while True:
-                    pass
+                while time.monotonic() < deadline:
+                    if not hasattr(signal, "SIGALRM"):
+                        time.sleep(0.05)
             except TimeoutError:
                 raise RuntimeError("ResizeImgError: wrapped") from None
+            raise RuntimeError("ResizeImgError: wrapped")
         raise RuntimeError("ResizeImgError: genuine resize failure")
 
 

@@ -45,7 +45,7 @@
 | `config.py` | 读取 `.env` 与环境变量；`Settings` 中所有凭据字段 `repr=False` |
 | `db.py` | 引擎/会话、`begin_write`（维护共享锁）、`update_with_revision`（CAS） |
 | `models.py` | 全部 ORM 实体；案件子表一律带 `(case_id, …)` 组合外键 |
-| `storage.py` | 流式哈希、同盘暂存、`fsync` + `os.link` 无覆盖发布、回读校验、路径穿越拒绝 |
+| `storage.py` | 流式哈希、同盘暂存、`fsync` + `os.link` 无覆盖发布（POSIX / NTFS）、Windows 保留名清洗、回读校验、路径穿越与链接/Junction 拒绝 |
 | `imports.py` | 导入批次、逐项状态机、上传批次、幂等 `request_key` |
 | `materials.py` | 分类/显示名 CAS、工作副本、版本登记（同内容复用 `StoredObject`） |
 | `jobs.py` / `worker.py` | 任务队列、`FOR UPDATE SKIP LOCKED` 领取、advisory lock 保证单 worker |
@@ -102,7 +102,7 @@ Agent 通过 CLI 或 MCP 调用，进程在本机运行，读的是同一套数�
 
 ## 支持范围
 
-- 平台：macOS（Apple Silicon 已验证）。Linux 未验证，桌面启动器仅支持 macOS，但 `scripts/lwb` 的 `pg_ctl` 调用与 OCR 字体回退未在 Linux 上测过。
+- 平台：macOS（Apple Silicon 已实机验证）；Windows 10/11 已完成跨平台代码适配、桌面与生命周期启动器（`法律工作台.bat` / `scripts/lwb.cmd`）、线程版 OCR 超时保护及模拟单测，待在真实 Windows 宿主机按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 执行实机验收；Linux 未验证。
 - 规模：单机单用户。实测 1000 文件 / 10000 页 / 33100 段落 / 120305 个精确值，索引 128 秒，检索 P95 415ms（单字扫描 545ms）。
 - 并发：单 worker 串行处理；多客户端可并发读，写走 CAS 与数据库锁。
 - 未覆盖：多用户、权限分级、跨机同步、云存储、加密静态数据、审计合规留存。

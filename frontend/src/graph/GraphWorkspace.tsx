@@ -85,6 +85,8 @@ export interface GraphWorkspaceProps {
   section?: string;
   /** 页头右侧附加操作（如返回案件工作表）。 */
   headerAction?: ReactNode;
+  /** 案件级统一导航栏；原型页不传。 */
+  caseNav?: ReactNode;
   /** 原型演示控制；真实案件页不传。 */
   demo?: ReactNode;
   /** 出处点击：默认打开合成原文；真实案件页传入 SourcePreview 打开逻辑。 */
@@ -122,7 +124,7 @@ export interface GraphWorkspaceProps {
 
 export function GraphWorkspace({
   snapshot: ws, rules, run, runAgent, undo, notice = '', error = '',
-  onDismissNotice, onDismissError, section, headerAction, demo, onOpenSource, loadImpact,
+  onDismissNotice, onDismissError, section, headerAction, caseNav, demo, onOpenSource, loadImpact,
   onArchive, onLocalError, onLocalNotice, sourceOptions, evidenceImport, exportHref,
   refreshError = '', onRetryRefresh, caseId, onOpenSourcePreview, onReload,
 }: GraphWorkspaceProps) {
@@ -506,6 +508,7 @@ export function GraphWorkspace({
         <span className="app-section">{section ?? '案件关系图'}</span>
         {headerAction}
       </div></header>
+      {caseNav ?? null}
       <main className="graph-main">
         <div className="page-heading graph-heading">
           <div>
@@ -710,20 +713,23 @@ export function GraphWorkspace({
               </div>
             </div>
 
-            <ul className="graph-legend" aria-label="线型图例">
-              {rules.credibility.map((rule) => (
-                <li key={rule.value}>
-                  <span className="graph-legend-line" aria-hidden="true"
-                    style={{
-                      borderTopColor: rule.stroke,
-                      borderTopStyle: rule.dash ? 'dashed' : 'solid',
-                      borderTopWidth: Math.max(2, rule.width),
-                    }} />
-                  <strong>{rule.label}</strong>
-                  <span className="muted">{rule.hint}</span>
-                </li>
-              ))}
-            </ul>
+            <details className="graph-legend-details">
+              <summary>线型图例</summary>
+              <ul className="graph-legend" aria-label="线型图例">
+                {rules.credibility.map((rule) => (
+                  <li key={rule.value}>
+                    <span className="graph-legend-line" aria-hidden="true"
+                      style={{
+                        borderTopColor: rule.stroke,
+                        borderTopStyle: rule.dash ? 'dashed' : 'solid',
+                        borderTopWidth: Math.max(2, rule.width),
+                      }} />
+                    <strong>{rule.label}</strong>
+                    <span className="muted">{rule.hint}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
 
             {pathActive && pathSearch ? (
               <div className="graph-path-result" role="status">
@@ -799,12 +805,26 @@ export function GraphWorkspace({
           </aside>
         </div>
 
-        <EvidenceCatalogPanel ws={ws} readOnly={readOnly} run={run}
-          exportHref={exportHref} importSlot={evidenceImport}
-          runAgent={runAgent ?? (async () => ({
-            ok: false as const, code: 'read_only' as const,
-            message: '当前入口不提供 Agent 写入。',
-          }))} />
+        {caseId ? (
+          <details className="graph-evidence-fold">
+            <summary>
+              案卷证据目录（编号唯一来源 · 共 {ws.evidence.items.filter((item) => item.removed_at === null).length} 条）
+            </summary>
+            <EvidenceCatalogPanel ws={ws} readOnly={readOnly} run={run}
+              exportHref={exportHref} importSlot={evidenceImport}
+              runAgent={runAgent ?? (async () => ({
+                ok: false as const, code: 'read_only' as const,
+                message: '当前入口不提供 Agent 写入。',
+              }))} />
+          </details>
+        ) : (
+          <EvidenceCatalogPanel ws={ws} readOnly={readOnly} run={run}
+            exportHref={exportHref} importSlot={evidenceImport}
+            runAgent={runAgent ?? (async () => ({
+              ok: false as const, code: 'read_only' as const,
+              message: '当前入口不提供 Agent 写入。',
+            }))} />
+        )}
       </main>
 
       {entityDialog ? (

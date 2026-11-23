@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
+import os
 import uuid
 
 import pytest
@@ -13,6 +14,8 @@ from legal_workbench.db import get_session_factory
 from legal_workbench.errors import ErrorCode, WorkbenchError
 from legal_workbench.storage import Storage, hash_file
 
+from . import factories
+
 
 @pytest.fixture
 def import_root(tmp_path):
@@ -23,8 +26,16 @@ def import_root(tmp_path):
     (root / "broken.docx").write_bytes(b"PK-not-a-real-zip")
     (root / "sub" / "unknown.xyz").write_bytes(b"unsupported but stored")
     (root / ".DS_Store").write_bytes(b"junk")
-    (root / "link.txt").symlink_to("/etc/hosts")
-    (root / "linkdir").symlink_to("/tmp")
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("outside", encoding="utf-8")
+    outside_dir = tmp_path / "outside-dir"
+    outside_dir.mkdir()
+    try:
+        (root / "link.txt").symlink_to(outside_file)
+        (root / "linkdir").symlink_to(outside_dir, target_is_directory=True)
+    except OSError as exc:
+        if not (os.name == "nt" and getattr(exc, "winerror", None) == 1314):
+            raise
     (root / ".git").mkdir()
     (root / ".git" / "config").write_bytes(b"junk dir")
     return root
@@ -56,18 +67,19 @@ def items_of(db, intake_id):
 
 
 def test_mixed_batch_all_items_terminal(db, store, settings_for, import_root):
-    from tests import factories
     case_id = factories.create_case(db)
+    has_symlinks = (import_root / "link.txt").is_symlink() and (import_root / "linkdir").is_symlink()
     created = make_intake(db, store, settings_for, case_id, import_root)
-    assert created.created and created.item_count == 8
+    assert created.created and created.item_count == (8 if has_symlinks else 6)
     outcome = imports.process_import_job(get_session_factory(), store, created.job_id)
-    assert (outcome.ready, outcome.failed, outcome.skipped) == (4, 0, 4)
+    assert (outcome.ready, outcome.failed, outcome.skipped) == (4, 0, 4 if has_symlinks else 2)
     assert outcome.status == "succeeded"
     rows = items_of(db, created.intake_id)
     assert {row.status for row in rows} <= {"ready", "failed", "skipped"}
-    assert {row.error_code for row in rows if row.status == "skipped"} == {
-        "ignored_system_file", "symlink_skipped", "ignored_system_directory",
-    }
+    expected_skips = {"ignored_system_file", "ignored_system_directory"}
+    if has_symlinks:
+        expected_skips.add("symlink_skipped")
+    assert {row.error_code for row in rows if row.status == "skipped"} == expected_skips
     materials = db.execute(select(models.Material).where(models.Material.case_id == case_id)).scalars().all()
     assert len(materials) == 4
     objects = db.execute(select(models.StoredObject).where(models.StoredObject.case_id == case_id)).scalars().all()
@@ -191,10 +203,9 @@ def test_source_outside_import_roots_rejected(db, store, settings_for, tmp_path)
 
 
 def test_symlink_source_rejected(db, store, settings_for, import_root, tmp_path):
-    from tests import factories
     case_id = factories.create_case(db)
     link = tmp_path / "link-to-root"
-    link.symlink_to(import_root)
+    factories.symlink_or_skip(link, import_root, target_is_directory=True)
     with pytest.raises(WorkbenchError) as exc:
         imports.create_intake(db, store, case_id=case_id, source_path=str(link),
                               source_label="TEST-ONLY", request_key="link", settings=settings_for)

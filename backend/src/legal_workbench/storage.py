@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import ntpath
 import os
 import re
 import shutil
@@ -20,7 +21,7 @@ import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import BinaryIO, Iterable, Iterator
 
 from .config import load_settings
@@ -28,6 +29,17 @@ from .errors import ErrorCode, WorkbenchError
 
 CHUNK = 1024 * 1024
 _SAFE_EXT = re.compile(r"^\.[a-z0-9]{1,10}$")
+_WINDOWS_INVALID_CHARS = re.compile(r'[<>:"|?*]')
+_WINDOWS_RESERVED_NAMES = frozenset({
+    "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+})
+
+
+def is_link_or_junction(path: Path) -> bool:
+    """Detect POSIX/NTFS symlinks and Windows NTFS directory junctions."""
+    return path.is_symlink() or (hasattr(os.path, "isjunction") and os.path.isjunction(path))
 
 
 def hash_stream(stream: BinaryIO) -> tuple[str, int]:
@@ -44,14 +56,31 @@ def hash_file(path: Path) -> tuple[str, int]:
         return hash_stream(handle)
 
 
+def _is_windows_reserved(name: str) -> bool:
+    head = name.partition(".")[0].rstrip(" ").upper()
+    if head in _WINDOWS_RESERVED_NAMES:
+        return True
+    return hasattr(ntpath, "isreserved") and ntpath.isreserved(name)
+
+
+def _truncate_component(name: str, limit: int = 120) -> str:
+    if len(name) <= limit:
+        return name
+    stem, dot, ext = name.rpartition(".")
+    if dot and len(ext) <= 10 and len(ext) + 2 <= limit:
+        return stem[: limit - len(ext) - 1] + "." + ext
+    return name[:limit]
+
+
 def safe_name(name: str, fallback: str = "material") -> str:
     """Display-name to a single safe path component (no directories)."""
     name = unicodedata.normalize("NFC", name).replace("\\", "/").split("/")[-1]
-    name = "".join(ch for ch in name if ch >= " " and ch != "\x7f").strip()
-    name = name.lstrip(".") or fallback
-    if len(name) > 120:
-        stem, dot, ext = name.rpartition(".")
-        name = (stem[: 120 - len(ext) - 1] + "." + ext) if dot and len(ext) <= 10 else name[:120]
+    name = "".join(ch for ch in name if ch >= " " and ch != "\x7f")
+    name = _WINDOWS_INVALID_CHARS.sub("_", name)
+    name = name.lstrip(". ").rstrip(" .") or fallback
+    name = _truncate_component(name, 120).lstrip(". ").rstrip(" .") or fallback
+    if _is_windows_reserved(name):
+        name = _truncate_component(f"_{name}", 120).lstrip(". ").rstrip(" .") or fallback
     return name
 
 
@@ -99,10 +128,12 @@ class Storage:
     # ---- path safety -------------------------------------------------
     def managed_path(self, relative: str) -> Path:
         """Resolve a stored relative path; reject escapes and any symlink component."""
+        if "\\" in relative:
+            raise WorkbenchError(ErrorCode.INVALID_PATH, "受管路径不合法", {"path": relative})
         pure = PurePosixPath(relative)
         if not relative or pure.is_absolute() or any(
-            part in ("", ".", "..") for part in pure.parts
-        ):
+            part in ("", ".", "..") or ":" in part for part in pure.parts
+        ) or PureWindowsPath(relative).is_absolute():
             raise WorkbenchError(ErrorCode.INVALID_PATH, "受管路径不合法", {"path": relative})
         current = self.root
         for part in pure.parts:
@@ -111,14 +142,10 @@ class Storage:
                 mode = current.lstat().st_mode
             except FileNotFoundError:
                 continue
-            if stat.S_ISLNK(mode):
+            if stat.S_ISLNK(mode) or is_link_or_junction(current):
                 raise WorkbenchError(ErrorCode.INVALID_PATH, "受管路径包含符号链接", {"path": relative})
         resolved = current.resolve(strict=False)
-        try:
-            inside = os.path.commonpath([str(self.root), str(resolved)]) == str(self.root)
-        except ValueError:
-            inside = False
-        if not inside:
+        if not resolved.is_relative_to(self.root):
             raise WorkbenchError(ErrorCode.INVALID_PATH, "受管路径越界", {"path": relative})
         return current
 
@@ -161,7 +188,7 @@ class Storage:
                    operation_id: uuid.UUID | None = None,
                    max_bytes: int | None = None) -> StagedFile:
         source = Path(source)
-        if source.is_symlink():
+        if is_link_or_junction(source):
             raise WorkbenchError(ErrorCode.INVALID_PATH, "不接受符号链接来源", {"path": str(source)})
         before = source.stat()
         with source.open("rb") as handle:
@@ -313,7 +340,7 @@ class Storage:
         base = self.root / "cases" / str(case_id)
         if not base.is_dir():
             return []
-        return (p for p in base.rglob("*") if p.is_file() and not p.is_symlink())
+        return (p for p in base.rglob("*") if p.is_file() and not is_link_or_junction(p))
 
 
 class _BytesReader:

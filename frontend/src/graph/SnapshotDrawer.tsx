@@ -11,6 +11,7 @@ import {
   diffHighlight, diffPayloads, pendingChangesInGraph,
 } from './model';
 import { channelLabel, credibilityRule } from './rules';
+import { undoShortcutLabel } from '../ui/shortcuts';
 import type {
   CommandResult, ConsentAction, GraphCommandRunner, GraphRules, GraphSnapshot,
   RelationGraphSnapshot,
@@ -331,7 +332,7 @@ export function SnapshotDrawer({
               {restoreConfirm ? (
                 <div className="graph-restore-confirm" role="alertdialog" aria-label="确认恢复快照">
                   <p>将把 v{current.version_no}「{current.stage_label}」的主体、关系、出处、分组与布局覆盖到当前工作稿，
-                    并写入变更记录；可用撤销（⌘Z）回到恢复前。原快照不变。</p>
+                    并写入变更记录；可用撤销（{undoShortcutLabel()}）回到恢复前。原快照不变。</p>
                   <div className="graph-form-actions">
                     <button type="button" onClick={() => setRestoreConfirm(false)}>取消</button>
                     <button type="button" disabled={busy} onClick={async () => {

@@ -22,6 +22,7 @@
 .graph-tabs button[aria-selected=true] {
   background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 650;
 }
+.graph-tabs button[aria-selected=true] .muted { color: inherit; opacity: .85; }
 .graph-tabs button:disabled { opacity: .55; cursor: not-allowed; }
 .graph-tab-add { border-style: dashed !important; }
 .graph-description { margin: 0 0 12px; font-size: 13px; }
@@ -201,7 +202,7 @@
   gap: 8px; flex-wrap: wrap; margin-bottom: 8px;
 }
 .graph-inspector-kind { margin: 0 0 2px; font-size: 11px; color: var(--muted); font-weight: 650; }
-.graph-review-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.graph-review-list { list-style: none; margin: 0; padding: 0 4px 0 0; display: grid; gap: 10px; max-height: 360px; overflow-y: auto; scrollbar-gutter: stable; }
 .graph-review-item { border: 1px solid #e4cf9f; background: #fffaf0; border-radius: 8px; padding: 8px 10px; }
 .graph-review-item header { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
 .graph-review-diff { margin: 6px 0; padding-inline-start: 18px; font-size: 12px; display: grid; gap: 2px; }
@@ -429,6 +430,14 @@
   .graph-snapshot-layout { grid-template-columns: minmax(0, 1fr); max-height: calc(94vh - 74px); }
   .graph-snapshot-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 260px; }
 }
+.graph-legend-details { margin: 8px 0 6px; font-size: 12px; color: var(--muted); }
+.graph-legend-details summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+.graph-evidence-fold {
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+  padding: 12px 16px;
+}
+.graph-evidence-fold > summary { cursor: pointer; font-size: 14px; font-weight: 650; color: var(--ink); }
+.graph-evidence-fold[open] > summary { margin-bottom: 12px; }
 @media (max-width: 760px) {
   .graph-main { padding: 16px 12px 48px; }
   .graph-heading h1 { font-size: 19px; }

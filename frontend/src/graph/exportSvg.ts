@@ -10,7 +10,7 @@ import { NODE_HEIGHT, NODE_WIDTH } from './layout';
 const PAD = 36;
 const HEADER = 78;
 const LEGEND = 118;
-const FONT = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", '
+const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", '
   + '"Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif';
 
 export interface GraphExportReference {

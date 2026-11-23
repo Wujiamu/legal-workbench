@@ -14,7 +14,7 @@ from .coverage import coverage_for_version, latest_run, run_coverage
 from .db import begin_write, update_with_revision
 from .errors import ErrorCode, WorkbenchError
 from .schemas import Coverage, IntakeStatus, MaterialSummary, UpdateAcquisitionInput
-from .storage import Storage, safe_name
+from .storage import Storage, is_link_or_junction, safe_name
 
 DEFAULT_CATEGORY = "待分类"
 # A real extension: short, lowercase alphanumeric, no brackets or spaces.
@@ -186,7 +186,7 @@ def register_file_version(session: Session, storage: Storage, *, case_id: uuid.U
                               "expected_revision": expected_revision,
                               "actual_revision": working.revision})
     path = storage.managed_path(working.relative_path)
-    if path.is_symlink() or not path.is_file():
+    if is_link_or_junction(path) or not path.is_file():
         raise WorkbenchError(ErrorCode.INVALID_PATH, "工作副本文件缺失或被替换为链接",
                              {"working_copy_id": str(working_copy_id)})
     # Take the revision first, before anything with side effects.  Doing this after

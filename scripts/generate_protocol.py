@@ -228,4 +228,7 @@ for operation, method, path, input_name, output_name in OPERATIONS:
 
     doc['paths'].setdefault(path, {})[method] = item
 (ROOT / 'docs').mkdir(exist_ok=True)
-(ROOT / 'docs' / 'openapi.json').write_text(json.dumps(doc, ensure_ascii=False, indent=2) + '\n')
+(ROOT / 'docs' / 'openapi.json').write_text(
+    json.dumps(doc, ensure_ascii=False, indent=2) + '\n',
+    encoding='utf-8',
+)
