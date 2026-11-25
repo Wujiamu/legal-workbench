@@ -3,7 +3,7 @@
   "name": "plainfolio",
   "version": "0.1.0",
   "description": "素章（PlainFolio）本地离线案件工作台的 Agent 插件包：默认锁死（deny_all），须由承办人在本机 agent-grant 按案授权后，才能通过 stdio MCP 检索案件、材料、索引与原文出处，保存带引用的分析，导出图表复核审计包；Agent 的写入一律是待确认提案，确认与撤回只由承办人完成。",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "legal",
     "litigation",
