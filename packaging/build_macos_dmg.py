@@ -176,23 +176,39 @@ def assemble_app(source_root: Path, onedir: Path, staging_dir: Path, *,
     app = staging_dir / APP_BUNDLE
     if app.exists():
         shutil.rmtree(app)
-    macos = app / "Contents" / "MacOS"
-    resources = app / "Contents" / "Resources"
+    contents = app / "Contents"
+    macos = contents / "MacOS"
+    frameworks = contents / "Frameworks"
+    resources = contents / "Resources"
     macos.mkdir(parents=True)
+    frameworks.mkdir(parents=True)
     resources.mkdir(parents=True)
-    shutil.copytree(onedir, macos, dirs_exist_ok=True)
+
+    internal_src = onedir / "_internal"
+    if internal_src.is_dir():
+        shutil.copytree(internal_src, frameworks, symlinks=True, dirs_exist_ok=True)
+    for entry in onedir.iterdir():
+        if entry.name == "_internal":
+            continue
+        dest = macos / entry.name
+        if entry.is_dir():
+            shutil.copytree(entry, dest, symlinks=True, dirs_exist_ok=True)
+        else:
+            shutil.copy2(entry, dest, follow_symlinks=False)
+    os.symlink("../Frameworks", macos / "_internal")
+
     executable = macos / EXECUTABLE_NAME
     if executable.is_file():
         executable.chmod(0o755)
-    (app / "Contents" / "Info.plist").write_bytes(info_plist(version))
+    (contents / "Info.plist").write_bytes(info_plist(version))
     shutil.copy2(icon, resources / "AppIcon.icns")
     return app
 
 
 def stage_runtime(app: Path, *, source_root: Path, pg_dir: Path | None,
                   models_dir: Path | None, allow_missing_runtime: bool) -> None:
-    """Copy PostgreSQL 18 + OCR models where ``sys._MEIPASS`` will look for them."""
-    internal = app / "Contents" / "MacOS" / "_internal"
+    """Copy PostgreSQL 18 + OCR models where ``Contents/Frameworks`` and ``_internal`` look for them."""
+    internal = app / "Contents" / "Frameworks"
     internal.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, str(source_root / "packaging" / "stage_bundle.py"),
                "--source-root", str(source_root), "--staging-dir", str(internal),

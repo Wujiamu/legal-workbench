@@ -39,8 +39,8 @@ from collections.abc import Callable, Sequence
 from urllib.error import URLError
 from urllib.request import ProxyHandler, build_opener
 
-from . import backup, config
-from .config import Settings, load_settings, pg_env
+from legal_workbench import backup, config
+from legal_workbench.config import Settings, load_settings, pg_env
 
 APP_NAME = "PlainFolio"
 APP_VERSION = "0.1.0"
@@ -446,8 +446,8 @@ def database_revision(settings: Settings | None = None) -> str | None:
 
 
 def _backfill_progress() -> int:
-    from . import progress
-    from .db import session_scope
+    from legal_workbench import progress
+    from legal_workbench.db import session_scope
 
     with session_scope() as session:
         return progress.backfill_default_fragments(session)
@@ -466,8 +466,8 @@ def backup_before_upgrade(settings: Settings, destination: Path) -> backup.Backu
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
-    from .db import sqlalchemy_url
-    from .storage import Storage
+    from legal_workbench.db import sqlalchemy_url
+    from legal_workbench.storage import Storage
 
     engine = create_engine(sqlalchemy_url(settings.database_url), future=True)
     try:
@@ -707,7 +707,7 @@ def start_stack(layout: Layout, settings: Settings, *, pg_bin: Path,
 def _run_server() -> int:
     import uvicorn
 
-    from .app import app
+    from legal_workbench.app import app
 
     settings = load_settings()
     uvicorn.run(app, host=settings.host, port=settings.port,
@@ -716,9 +716,9 @@ def _run_server() -> int:
 
 
 def _run_worker() -> int:
-    from .db import get_engine
-    from .storage import Storage
-    from .worker import run_worker
+    from legal_workbench.db import get_engine
+    from legal_workbench.storage import Storage
+    from legal_workbench.worker import run_worker
 
     settings = load_settings()
     run_worker(get_engine(), Storage(settings.data_root), once=False)
@@ -726,20 +726,20 @@ def _run_worker() -> int:
 
 
 def _run_mcp() -> int:
-    from .mcp_server import main as mcp_main
+    from legal_workbench.mcp_server import main as mcp_main
 
     mcp_main()
     return 0
 
 
 def _run_cli(argv: Sequence[str]) -> int:
-    from .cli import main as cli_main
+    from legal_workbench.cli import main as cli_main
 
     return int(cli_main(list(argv)) or 0)
 
 
 def _run_doctor() -> int:
-    from .doctor import main as doctor_main
+    from legal_workbench.doctor import main as doctor_main
 
     return int(doctor_main() or 0)
 
