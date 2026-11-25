@@ -153,11 +153,14 @@ jobs:
       - name: Smoke-test frozen Windows binary
         run: |
           $exe = Resolve-Path "packaging\dist\PlainFolio\PlainFolio.exe"
-          $smokeHome = Join-Path $env:RUNNER_TEMP "smoke-home-win"
+          $smokeBase = Join-Path $env:LOCALAPPDATA "PlainFolio-smoke"
+          $smokeHome = Join-Path $smokeBase "home"
+          if (Test-Path $smokeBase) { Remove-Item -Recurse -Force $smokeBase }
           New-Item -ItemType Directory -Path $smokeHome -Force | Out-Null
+          icacls $smokeBase /grant "$($env:USERNAME):(OI)(CI)F" /T | Out-Null
           $env:LWB_HOME = $smokeHome
-          $env:LWB_INSTANCE_CONFIG = Join-Path $env:RUNNER_TEMP "smoke-instance-win.json"
-          $env:LWB_AGENT_ACCESS_FILE = Join-Path $env:RUNNER_TEMP "smoke-agent-access-win.json"
+          $env:LWB_INSTANCE_CONFIG = Join-Path $smokeBase "instance.json"
+          $env:LWB_AGENT_ACCESS_FILE = Join-Path $smokeBase "agent-access.json"
           try {
             & $exe --version
             if ($LASTEXITCODE -ne 0) { throw "--version failed ($LASTEXITCODE)" }
@@ -177,8 +180,19 @@ jobs:
             & $exe --run-cli agent-status
             if ($LASTEXITCODE -ne 0) { throw "--run-cli agent-status failed ($LASTEXITCODE)" }
           }
+          catch {
+            foreach ($logFile in @("init-failure.log", "postgres.log")) {
+              $lp = Join-Path $smokeHome "var\runtime\$logFile"
+              if (Test-Path $lp) {
+                Write-Host "=== $logFile ==="
+                Get-Content -Raw -Encoding utf8 $lp
+              }
+            }
+            throw
+          }
           finally {
             & $exe --stop
+            if (Test-Path $smokeBase) { Remove-Item -Recurse -Force $smokeBase -ErrorAction SilentlyContinue }
           }
 
       - name: Generate SHA-256 checksum
