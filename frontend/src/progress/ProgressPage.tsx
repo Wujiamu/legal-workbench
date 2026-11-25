@@ -4,6 +4,7 @@
  * P4 接真实接口时，本页换成案件工作区的进度页签。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { AppBrand, ThemeSwitcher } from '../components/BrandMark';
 import { ChangeReviewPanel } from './ChangeReviewPanel';
 import { buildLitigationFixture, FIXTURE_CASE_TITLE } from './fixtures';
 import { GraphView } from './GraphView';
@@ -167,8 +168,9 @@ export default function ProgressPrototypePage() {
   return (
     <div className="progress-prototype">
       <header className="app-bar"><div className="app-bar-inner">
-        <span className="app-brand">法律工作台</span>
+        <AppBrand />
         <span className="app-section">办案进度原型 · TEST-ONLY 合成案卷</span>
+        <ThemeSwitcher />
       </div></header>
       <main className="progress-main">
         <div className="page-heading">

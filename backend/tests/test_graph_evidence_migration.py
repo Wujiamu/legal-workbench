@@ -41,8 +41,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 DRILL_DB = "legal_workbench_graph_drill"
 REV_0006 = "0006_case_archive_time"
 REV_0007 = "0007_graph_evidence"
-# 正式链的 head 是 0008；本文件仍逐项核对 0007 的对象。
-REV_0008 = "0008_claim_amounts"
+# 正式链的 head 是 0009；本文件仍逐项核对 0007 的对象与 alembic check。
+REV_HEAD = "0009_case_metadata"
 
 NEW_TABLES = (
     "case_entities", "entity_aliases", "case_relations", "graph_sources",
@@ -187,7 +187,7 @@ def test_upgrade_0006_to_0007_and_back(drill_db):
     with engine.begin() as conn:
         # revision id fits the untouched VARCHAR(32) alembic_version column
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-        assert version == REV_0008 and len(REV_0007) <= 32
+        assert version == REV_HEAD and len(REV_HEAD) <= 32
         width = conn.execute(text(
             "SELECT character_maximum_length FROM information_schema.columns "
             "WHERE table_name='alembic_version' AND column_name='version_num'"

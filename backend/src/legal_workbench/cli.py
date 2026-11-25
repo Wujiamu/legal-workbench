@@ -2,6 +2,17 @@
 
 Every subcommand calls the same service function the HTTP API and MCP server use;
 there is no shell interpolation of user input and no raw SQL entry point.
+
+**Why the CLI is not behind the agent fence.**  ``agent_access`` guards the MCP
+transport only.  This CLI is the 承办人's own terminal — the same person who
+runs ``scripts/lwb agent-grant`` — and it is also what the workbench's own
+operational scripts use.  Putting the policy in front of it would mean an
+operator could not inspect or repair a case without first granting themselves
+permission through a command that itself runs through this module.  The boundary
+that matters is "a model on the other end of a socket", and that boundary is the
+MCP server, which is fully fenced.  A Skill that hands CLI commands to a model is
+covered by the authorisation clause at the top of every business Skill: the model
+must ask before it connects, and must not use the CLI to bypass a ``forbidden``.
 """
 from __future__ import annotations
 
@@ -13,11 +24,13 @@ import sys
 import uuid
 from dataclasses import asdict, is_dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from . import analysis, audit, cases, imports, jobs, materials, parsing, search, worker
+from . import (agent_access_cli, analysis, audit, cases, imports, jobs, materials, parsing, search,
+               worker)
 from .config import load_settings, resolve_pg_bin
 from .db import get_engine, get_session_factory
 from .errors import ErrorCode, WorkbenchError
@@ -354,6 +367,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--relation-id")
     p = add("evidence-catalog", "读取证据目录")
     p.add_argument("--case-id", required=True)
+    p = add("evidence-export-bundle", "自动装卷并导出法院标准证据卷宗包（ZIP）")
+    p.add_argument("--case-id", required=True)
+    p.add_argument("--output", required=True, help="输出 .zip 文件路径")
     p = add("evidence-add-group", "新建证据分组（待确认）")
     p.add_argument("--case-id", required=True)
     p.add_argument("--title", required=True)
@@ -566,8 +582,6 @@ def dispatch(args: argparse.Namespace) -> Any:
                 session, _storage(),
                 case_id=_uuid(args.case_id) if args.case_id else None)
         if args.command == "backup":
-            from pathlib import Path
-
             from . import backup
 
             settings = load_settings()
@@ -581,8 +595,6 @@ def dispatch(args: argparse.Namespace) -> Any:
                     "file_count": result.file_count, "total_bytes": result.total_bytes,
                     "complete": result.complete}
         if args.command == "verify-backup":
-            from pathlib import Path
-
             from . import backup
 
             manifest = backup.verify_backup(Path(args.destination))
@@ -590,8 +602,6 @@ def dispatch(args: argparse.Namespace) -> Any:
                     "created_at": manifest["created_at"],
                     "files": len(manifest["files"])}
         if args.command == "restore":
-            from pathlib import Path
-
             from . import backup
 
             settings = load_settings()
@@ -820,6 +830,18 @@ def dispatch(args: argparse.Namespace) -> Any:
         if args.command == "evidence-catalog":
             from . import evidence_catalog
             return evidence_catalog.get_catalog(session, _uuid(args.case_id))
+        if args.command == "evidence-export-bundle":
+            from . import dossier_export
+            result = dossier_export.export_evidence_bundle(session, _storage(), _uuid(args.case_id))
+            out_path = Path(args.output)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(result.data)
+            return {
+                "output": str(out_path.resolve()),
+                "filename": result.filename,
+                "size_bytes": len(result.data),
+                **result.summary,
+            }
         if args.command == "evidence-add-group":
             from . import evidence_catalog
             from .schemas import AddEvidenceGroupInput
@@ -983,6 +1005,11 @@ def main(argv: list[str] | None = None) -> int:
     _ensure_utf8_stdio()
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING,
                         format="%(levelname)s %(name)s %(message)s")
+    # 授权命令不走 argparse，也不输出 JSON：它们是承办人在终端里跑的人读命令，
+    # 而且打包态没有 scripts/ 目录，`--run-cli agent-grant …` 必须能走到这里。
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw and raw[0] in agent_access_cli.COMMANDS:
+        return agent_access_cli.run(raw[0], raw[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

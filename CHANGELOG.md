@@ -1,5 +1,56 @@
 # 变更记录
 
+## 2026-11-25 · Agent 访问硬围栏与授权收紧（路线 2 · `0009_case_metadata` · 零迁移源码完成）
+
+- **版本基线与兼容性**：零数据库迁移（维持 `0009_case_metadata`）；未改动 `.env`、`var/`、真实案件数据或网页端行为。关联变更单见 [20261125-Agent访问硬围栏与授权收紧](docs/changes/20261125-Agent访问硬围栏与授权收紧.md)。
+- **默认锁死＋单案授权（后端 / MCP）**：
+  - 新增 [agent_access.py](backend/src/legal_workbench/agent_access.py)：策略文件默认 `<工作台目录>/var/runtime/agent-access.json`（**默认不存在 = `deny_all`**），原子写入、权限 `0600`，只含 `mode` / `allowed_case_ids` / `allow_create_case` / `updated_at`，无凭据、无案件正文；文件损坏、缺字段或含非法 UUID 一律降级 `deny_all`。
+  - [mcp_server.py](backend/src/legal_workbench/mcp_server.py) 的 **52 个带 `case_id` 工具全部套 `_case_guard`**，在开会话与任何服务调用之前校验 UUID 与授权；`list_cases` 在 `deny_all` 下只允许 `limit=0` 探活、在 `allowlist` 下只返回已授权案件（`total` 仅计授权范围，新增 [cases.list_cases_by_ids](backend/src/legal_workbench/cases.py)）；`create_case` 默认拒绝；新增只读自检 `get_access_policy`；模块导入期 `_enforce_case_fence()` 缺一个围栏即启动失败。**不暴露任何授权/解锁工具。**
+  - 承办人本机授权命令：`scripts/lwb agent-status|agent-grant <case_id>|agent-revoke <case_id>|agent-lock|agent-allow-all --confirm`（实现集中在 [agent_access_cli.py](backend/src/legal_workbench/agent_access_cli.py)，打包态用 `<可执行文件> --run-cli agent-*`）；`agent-allow-all` 不带 `--confirm` 拒绝执行并退出码 2。
+- **移除常驻 DSH Cordis 插件**：删除 `plugins/dsh-plainfolio/` 整目录（源码、构建产物、依赖与测试，`git ls-files` 为空，无用户业务数据）；变更单标记废弃并保留调研留痕；DSH 改为按需使用通用 `@deepseek-ai/dsh-mcp-client` stdio 配置，受同一门禁约束。
+- **业务 Skill 全面收紧**：五份 Skill（`plainfolio-workbench`、`legal-workbench-cli`、`chart-substantive-review`、`nonstandard-table-script-sop`、`legal-workbench-e2e-acceptance`，共 10 个镜像文件）正文最前面统一加入「授权前置与硬围栏纪律」：禁止默认连接/探测/列举、必须先申请授权（目标案件＋模型合规性＋本机 `agent-grant`）、`forbidden` 必须停下不得绕过、结束提醒 `agent-revoke`/`agent-lock`。
+- **验证**：后端真实 PG18 全量 **792 passed, 1 skipped**；本轮受影响 7 个测试集 **180 passed, 1 skipped**；新增 [test_agent_access_gate.py](backend/tests/test_agent_access_gate.py) **58 项**（含 52 工具反射审计、无授权写工具断言、真实 stdio 握手、策略降级与权限、CLI 命令闭环、环境变量覆盖），并做四项反向验证（撤掉围栏/关掉导入审计、`allowlist` 换回未过滤查询、损坏文件降级为 `allow_all`）均能检出对应失败；`packaging/build_macos_dmg.py --dry-run` 与 `build_windows_exe.py --dry-run` 均 exit 0。仓库内不存在 `var/runtime/agent-access.json`，`plugins/dsh-plainfolio/` 已不存在。
+- **未验证**：未在真实 Codex / DSH / Claude Desktop 客户端跑会话，未在 Windows 实机执行授权命令，未真机构建安装包。实机验收项见 [NEXT_STEPS](docs/NEXT_STEPS.md)。
+
+## 2026-11-24 · 通用 Agent 插件包与桌面安装包打包工程（`0009_case_metadata` · 零迁移源码完成，待实机验收）
+
+- **版本基线与定位**：零数据库迁移，保持现有本机 `127.0.0.1:8765` 源码运行环境与数据目录不变；两项功能均已完成源码与自动化验证，尚未在外部客户端与真机执行安装器验收。
+- **通用 Agent 插件包（[20261124-通用Agent插件包](docs/changes/20261124-通用Agent插件包.md)）**：
+  - 实例发现与路径解耦：[config.py](backend/src/legal_workbench/config.py) 新增 `instance_config_path()` / `resolve_home_dir()` / `write_instance_pointer()`（仅写路径与时间戳，`0600` 无凭据）；[scripts/lwb](scripts/lwb) 新增 `register-instance`；[pyproject.toml](backend/pyproject.toml) 注册 `lwb-cli` / `lwb-mcp` / `lwb-doctor`。
+  - 便携插件包：`plugins/plainfolio/`（`plugin.json`、`mcp.json`/`.mcp.json`、纯标准库启动器 `scripts/run-mcp.py`、三个面向律师的业务 Skill，排除内部验收 SOP）与本地市场清单 [.agents/plugins/marketplace.json](.agents/plugins/marketplace.json)（后继已由 2026-11-25 路线 2 收紧为默认锁死＋单案授权）。
+- **桌面安装包打包工程（[20261124-桌面安装包打包工程](docs/changes/20261124-桌面安装包打包工程.md) · [PACKAGING](docs/PACKAGING.md)）**：
+  - 只读程序目录与可写数据目录解耦：新增 [runtime_paths.py](backend/src/legal_workbench/runtime_paths.py)，打包态数据落平台用户目录（macOS `~/Library/Application Support/PlainFolio`、Windows `%LOCALAPPDATA%\PlainFolio`），源码态严格回退 `ROOT`。
+  - 新增桌面统一入口 [desktop_launcher.py](backend/src/legal_workbench/desktop_launcher.py)（冻结态 `--run-*` 自复用、首次自动建库初始化、升级前调用 `backup.py` 全量备份并校验后再迁移、单实例锁）与 `packaging/` 跨平台组装脚本（`stage_bundle.py`、`plainfolio.spec`、`build_macos_dmg.py`、`windows/plainfolio.iss`、`build_windows_exe.py`；卸载不删用户数据目录；干跑校验全部通过）。
+
+## 2026-11-24 · 素章（PlainFolio）品牌重塑与五套实时主题切换（`0009_case_metadata` · **零迁移已应用至本机 `127.0.0.1:8765`**）
+
+- **版本基线与兼容性**：零数据库迁移（维持 `0009_case_metadata`），桌面启动器文件名 `法律工作台.app` / `法律工作台.bat`、CLI `scripts/lwb` 及 `scripts/lwb-launch` 报错弹窗标题保持兼容不改名；网页前端产物 `frontend/dist/` 已重新构建并由本机服务 `127.0.0.1:8765` 直接提供。关联变更单见 [20261124-素章品牌重塑与五套主题切换](docs/changes/20261124-素章品牌重塑与五套主题切换.md)。
+- **品牌与图形**：
+  - 全站更名为 **素章 · PlainFolio**，启用原创几何 Logo「编简成章」（三列素白简册 + 横贯封签与三枚穿绳孔），同步更新 [BrandMark.tsx](frontend/src/components/BrandMark.tsx)、[favicon.svg](frontend/public/favicon.svg)、`favicon.ico`、`apple-touch-icon.png`、`scripts/legal-workbench.ico`、`法律工作台.app/Contents/Resources/AppIcon.icns` 与 [banner.svg](docs/assets/banner.svg)。
+- **五套可实时切换配色与 CSS 变量收敛**：
+  - 新增 [theme.ts](frontend/src/ui/theme.ts)、全站 8 个顶栏 `<ThemeSwitcher />` 与 [index.html](frontend/index.html) 首屏防闪烁同步脚本，支持在 **宣素 · 青黛绛印（默认，低饱和古印泥）**、**全素 · 白纸浓墨（浅色顶栏）**、**汝素 · 天青砚灰**、**麻素 · 紫檀镇纸（低饱和老紫檀）**、**墨素 · 纯粹灰度（零彩色纯灰阶）** 间实时切换并持久化至 `localStorage('suzhang-theme')`（支持跨标签页 `storage` 同步）。
+  - 将 [workbench.css](frontend/src/workbench.css)、[graph.css](frontend/src/graph/graph.css)、[claims.css](frontend/src/claims/claims.css)、[progress.css](frontend/src/progress/progress.css)、[CoverageMatrix.tsx](frontend/src/components/CoverageMatrix.tsx) 与 [tokens.ts](frontend/src/ui/tokens.ts) 收敛为语义 CSS 变量，同时保持 [exportSvg.ts](frontend/src/graph/exportSvg.ts) 与 [exportClaimsSvg.ts](frontend/src/claims/exportClaimsSvg.ts) 的对外呈递 SVG 为固定白底印刷色。
+- **验证**：前端 `npx tsc --noEmit`、Vitest **58 文件 414 passed**（含 [theme.test.tsx](frontend/src/ui/theme.test.tsx) 4 项）与 `npm run build` 通过；`impeccable detect` 对 `workbench.css`/`BrandMark.tsx`/`theme.ts` 返回 `[]`；后端真实 PG18 全量 **632 passed, 1 skipped**，上传前双路独立代码审查并修复 DOCX XML 控制字符清理、装卷提前释放 `FOR SHARE` 锁、CSV 公式注入防护、PDF 渲染失败保留原件、多帧容错、OpenAPI 列表筛选参数补齐、主题浮层聚焦环对比度、概览页期限草稿保护与 `logo.svg` 替换等问题后，受影响 7 个后端测试集复测 **52 passed, 1 skipped**。
+
+## 2026-11-24 · `0009_case_metadata` 首页案件元信息、筛选排序与自动装卷打通（**源码完成，本机库已迁移至 `0009_case_metadata`**）
+
+- **版本基线与升级影响**：新增数据库迁移 [0009_case_metadata.py](backend/migrations/versions/0009_case_metadata.py)（向 `cases` 新增可空 `case_number`、`plaintiff`、`defendant` 与带 CHECK 约束的 `work_status`，默认 `'normal'`；升降级兼容存量记录）；迁移前完整备份位于 `var/backups/p6-20261124-0009/`（`complete: true`，`files: 13`），本机运行库已升至 `0009_case_metadata` 并通过 `check-consistency`（`ok: true`）。
+- **核心能力**：
+  - **首页工作台台账增强**：`cases` 表与工作表支持 `案号`、`原告`、`被告` 及 5 档固定办理状态（`正常推进` / `待补材料` / `待沟通/开会` / `待法院/对方` / `暂缓/中止`），新建弹窗与案件概览支持录入维护；工作表支持跨页全文关键词搜索（IME 安全）、状态/期限筛选、多列排序及行内 CAS 快速切状态（归档只读保护）。
+  - **自动装卷预填打通**：[dossier_export.py](backend/src/legal_workbench/dossier_export.py) 导出 `00_证据合订卷宗.pdf` 封面与 `01_证据目录.docx` 时自动带入案件已登记的 `案号`、`原告` 与 `被告`；同步修复独立代码审查发现的标题含斜杠前缀丢失、空口令加密 PDF 二次解码失败、损坏图片降级及 Safari Blob 下载提前回收等问题。
+  - **面向执业律师重写 README 与演示素材**：新增 [banner.svg](docs/assets/banner.svg) 与 4 个轻量演示 GIF，[README.md](README.md) 移除技术括号术语并更新「拖入本机」等表述，将用户提到的「阶段期限到期前 7/3/0 天兜底文件核查清单」记入 [NEXT_STEPS.md](docs/NEXT_STEPS.md) 候选需求。
+
+## 2026-11-24 · 自动装卷导出（`0008_claim_amounts` · 零迁移源码完成）
+
+- **版本基线与影响**：零数据库迁移（维持 `0008_claim_amounts`）；将 `reportlab>=5.1.0` 移入主依赖并新增 `pypdf>=5.0.0`，Mac/Windows 共用同一套后端装卷引擎与前端触发入口。
+- **核心能力（参照中国法院纸质装订与电子诉讼规范）**：
+  - 新增共享服务 [dossier_export.py](backend/src/legal_workbench/dossier_export.py)、HTTP 接口 `GET /api/v1/cases/{case_id}/evidence-catalog/bundle`、CLI 命令 `evidence-export-bundle` 及前端证据目录「一键装卷（ZIP）」按钮（支持已归档案件只读导出，仅纳入已确认分组/条目/绑定）。
+  - 导出双场景 ZIP 卷宗包：
+    1. `00_证据合订卷宗.pdf`：A4 幅面（宽图自动横向 A4）、左侧预留 20mm 装订线、封面＋两遍计算精确页码分组《证据目录》＋不占页码的证据分隔页＋PDF/图片原件居中缩放合并、右下角正文连续页码（`第 1 页` 起）、右上角严格留白预留法院归档编码区、树状 PDF 书签；DOCX/XLSX/TXT 等可编辑文件插入另附原件提示页。
+    2. `01_证据目录.docx` / `01_证据目录.csv`：带精确合订本页码与提交人签章栏的可编辑法院表格目录。
+    3. `02_分项证据材料/`：按 `证据组-序_安全名称` 统一重命名并按绑定起止页码裁切合并为单份 PDF 或保留原件，适配「人民法院在线服务」逐条上传（>50MB/100MB 自动提示）。
+- **验证**：`cd backend && uv run pytest tests/test_dossier_export.py tests/test_evidence_catalog.py` **18 passed**；`cd frontend && npm test && npm run build` **57 文件 408 passed**；对已归档仿真案卷 `a6e460f4-a739-40a3-93fc-dedfdcb436dc` 实跑导出 20 页 PDF 并逐页渲染视觉复核通过。
+
 ## 2026-11-23 · `v0.1.0` 界面交互与导航打磨（**源码与前端构建完成**）
 
 - **跨平台共用前端与交互修复**（macOS / Windows 共用一套 `frontend/` 代码，沿用 `undoShortcutLabel()` 平台键位与 `scrollbar-gutter: stable` 滚动条占位）：

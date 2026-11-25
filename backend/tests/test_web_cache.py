@@ -41,3 +41,11 @@ def test_api_has_no_static_cache_header(client):
     response = client.get("/api/v1/health")
     assert response.status_code == 200
     assert "cache-control" not in response.headers
+
+
+def test_favicons_and_apple_icon_served(client):
+    for path in ("/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"):
+        assert (dist / path.lstrip("/")).is_file(), f"缺少构建产物 {path}"
+        response = client.get(path)
+        assert response.status_code == 200
+        assert len(response.content) > 0

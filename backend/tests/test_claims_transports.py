@@ -20,6 +20,10 @@ from legal_workbench.schemas import AddClaimGroupInput, AddClaimItemInput, Chang
 from .factories import create_case
 from .test_api import new_case
 
+# 这些用例验证 MCP 工具的业务行为；访问围栏本身由 test_agent_access_gate.py 覆盖，
+# 因此这里显式放开（allow_all），不依赖任何宽松默认值。
+pytestmark = pytest.mark.usefixtures("agent_access_open")
+
 
 def cents(amount: str) -> int:
     return int(Decimal(amount.replace(",", "")) * 100)

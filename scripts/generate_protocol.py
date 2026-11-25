@@ -11,11 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 OPERATIONS = [
     ('create_case', 'post', '/api/v1/cases', 'CreateCaseInput', 'CreateCaseOutput'),
     ('list_cases', 'get', '/api/v1/cases', 'ListCasesInput', 'ListCasesOutput'),
-    ('dashboard', 'get', '/api/v1/dashboard', 'ListCasesInput', 'DashboardOutput'),
+    ('dashboard', 'get', '/api/v1/dashboard', 'DashboardInput', 'DashboardOutput'),
     # 首页跨案期限时间轴：只读投影，全部未归档案件、不分页。
     ('dashboard_deadlines', 'get', '/api/v1/dashboard/deadlines',
      'DashboardDeadlinesInput', 'DashboardDeadlinesOutput'),
     ('get_case', 'get', '/api/v1/cases/{case_id}', 'CaseInput', 'CaseOverview'),
+    ('update_case_metadata', 'patch', '/api/v1/cases/{case_id}/metadata', 'CaseMetadataInput', 'CaseOverview'),
     ('update_schedule', 'patch', '/api/v1/cases/{case_id}/schedule', 'CaseScheduleInput', 'CaseOverview'),
     ('list_annotations', 'get', '/api/v1/cases/{case_id}/annotations', 'ListAnnotationsInput', 'ListAnnotationsOutput'),
     ('create_annotation', 'post', '/api/v1/cases/{case_id}/annotations', 'CreateAnnotationInput', 'AnnotationOutput'),
@@ -138,6 +139,7 @@ OPERATIONS = [
     # 证据目录（P3 入口）。
     ('get_evidence_catalog', 'get', '/api/v1/cases/{case_id}/evidence-catalog', 'CaseInput', 'EvidenceCatalogOut'),
     ('export_evidence_catalog', 'get', '/api/v1/cases/{case_id}/evidence-catalog/export', 'CaseInput', 'EvidenceCatalogOut'),
+    ('export_evidence_bundle', 'get', '/api/v1/cases/{case_id}/evidence-catalog/bundle', 'CaseInput', 'EvidenceCatalogOut'),
     ('preview_evidence_catalog_import', 'post', '/api/v1/cases/{case_id}/evidence-catalog/import/preview', 'CaseInput', 'ImportPreviewOutput'),
     ('import_evidence_catalog', 'post', '/api/v1/cases/{case_id}/evidence-catalog/import', 'ImportEvidenceCatalogInput', 'EvidenceCatalogOut'),
     ('evidence_add_group', 'post', '/api/v1/cases/{case_id}/evidence-catalog/groups', 'AddEvidenceGroupInput', 'EvidenceCatalogOut'),
@@ -175,7 +177,7 @@ MULTIPART = {
     'graph_import_table_preview_upload': 'file',
 }
 BINARY_RESPONSE = {'preview_file_version', 'preview_pdf_page', 'download_file_version',
-                   'export_evidence_catalog'}
+                   'export_evidence_catalog', 'export_evidence_bundle'}
 _, schema = models_json_schema([(model, 'serialization') for model in models] + [(model, 'validation') for model in models], ref_template='#/components/schemas/{model}')
 components = schema['$defs']
 doc = {'openapi': '3.1.0', 'info': {'title': 'Legal Workbench API contract', 'version': '0.1.0'}, 'paths': {}, 'components': {'schemas': components}}
@@ -225,6 +227,8 @@ for operation, method, path, input_name, output_name in OPERATIONS:
             {media: {'schema': {'type': 'string'}} for media in ('text/markdown', 'text/csv')})
     if operation == 'export_evidence_catalog':
         item['responses']['200']['content'] = {'text/csv': {'schema': {'type': 'string'}}}
+    if operation == 'export_evidence_bundle':
+        item['responses']['200']['content'] = {'application/zip': {'schema': {'type': 'string', 'format': 'binary'}}}
 
     doc['paths'].setdefault(path, {})[method] = item
 (ROOT / 'docs').mkdir(exist_ok=True)

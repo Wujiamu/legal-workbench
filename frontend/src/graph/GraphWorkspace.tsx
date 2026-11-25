@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { chartsApi } from '../api/endpoints';
 import { downloadTextFile } from '../claims/exportClaimsSvg';
+import { AppBrand, ThemeSwitcher } from '../components/BrandMark';
 import { ChartExportDialog } from '../components/ChartExportDialog';
 import type { ApprovedIssue, ChartExportFormat, ChartExportSettings } from '../components/ChartExportDialog';
 import { EntityDiscoveryDialog } from './EntityDiscoveryDialog';
@@ -97,6 +98,8 @@ export interface GraphWorkspaceProps {
   evidenceImport?: ReactNode;
   /** 真实 CSV 导出地址；缺失时隐藏导出按钮。 */
   exportHref?: string;
+  /** 真实案件自动装卷（ZIP）下载地址；缺失时隐藏。 */
+  bundleHref?: string;
   /** 删除主体/关系前的影响面；返回 null 表示数据源未提供。 */
   loadImpact?: (target: { entity_id?: string; relation_id?: string })
     => Promise<{ id: string; title: string }[] | null>;
@@ -125,7 +128,7 @@ export interface GraphWorkspaceProps {
 export function GraphWorkspace({
   snapshot: ws, rules, run, runAgent, undo, notice = '', error = '',
   onDismissNotice, onDismissError, section, headerAction, caseNav, demo, onOpenSource, loadImpact,
-  onArchive, onLocalError, onLocalNotice, sourceOptions, evidenceImport, exportHref,
+  onArchive, onLocalError, onLocalNotice, sourceOptions, evidenceImport, exportHref, bundleHref,
   refreshError = '', onRetryRefresh, caseId, onOpenSourcePreview, onReload,
 }: GraphWorkspaceProps) {
   const readOnly = ws.archived;
@@ -504,9 +507,10 @@ export function GraphWorkspace({
   return (
     <div className="graph-prototype">
       <header className="app-bar"><div className="app-bar-inner">
-        <span className="app-brand">法律工作台</span>
+        <AppBrand />
         <span className="app-section">{section ?? '案件关系图'}</span>
         {headerAction}
+        <ThemeSwitcher />
       </div></header>
       {caseNav ?? null}
       <main className="graph-main">
@@ -811,7 +815,7 @@ export function GraphWorkspace({
               案卷证据目录（编号唯一来源 · 共 {ws.evidence.items.filter((item) => item.removed_at === null).length} 条）
             </summary>
             <EvidenceCatalogPanel ws={ws} readOnly={readOnly} run={run}
-              exportHref={exportHref} importSlot={evidenceImport}
+              exportHref={exportHref} bundleHref={bundleHref} importSlot={evidenceImport}
               runAgent={runAgent ?? (async () => ({
                 ok: false as const, code: 'read_only' as const,
                 message: '当前入口不提供 Agent 写入。',
@@ -819,7 +823,7 @@ export function GraphWorkspace({
           </details>
         ) : (
           <EvidenceCatalogPanel ws={ws} readOnly={readOnly} run={run}
-            exportHref={exportHref} importSlot={evidenceImport}
+            exportHref={exportHref} bundleHref={bundleHref} importSlot={evidenceImport}
             runAgent={runAgent ?? (async () => ({
               ok: false as const, code: 'read_only' as const,
               message: '当前入口不提供 Agent 写入。',

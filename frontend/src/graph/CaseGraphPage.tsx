@@ -101,6 +101,7 @@ function CaseGraph({ caseId }: { caseId: string }) {
         }}
         loadImpact={(target) => workspace.impact(target)}
         exportHref={evidenceApi.exportUrl(caseId)}
+        bundleHref={evidenceApi.bundleUrl(caseId)}
         evidenceImport={(
           <EvidenceImportPanel caseId={caseId} ws={ws} readOnly={ws.archived}
             onImported={() => { void workspace.reload(); }} />

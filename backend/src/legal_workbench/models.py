@@ -46,6 +46,7 @@ STATEMENT_KINDS = ("excerpt", "party_statement", "agent_analysis", "human_opinio
 EXACT_VALUE_KINDS = ("literal", "identifier", "amount", "date")
 INTEGRITY_STATUSES = ("ok", "integrity_error")
 TIME_SOURCES = ("timer", "manual")
+CASE_WORK_STATUSES = ("normal", "need_materials", "need_sync", "waiting_external", "paused")
 
 
 def uuid_pk() -> Mapped[uuid.UUID]:
@@ -59,10 +60,19 @@ def enum_check(column: str, values: tuple[str, ...], name: str) -> CheckConstrai
 
 class Case(Base):
     __tablename__ = "cases"
+    __table_args__ = (
+        enum_check("work_status", CASE_WORK_STATUSES, "ck_cases_work_status"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    case_number: Mapped[str | None] = mapped_column(Text)
+    plaintiff: Mapped[str | None] = mapped_column(Text)
+    defendant: Mapped[str | None] = mapped_column(Text)
+    work_status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=sa_text("'normal'"),
+    )
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sa_text("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

@@ -22,6 +22,10 @@ from . import factories
 
 BACKEND = __import__("pathlib").Path(__file__).resolve().parents[1]
 
+# 本文件验证既有 CLI/MCP 往返不退化；访问围栏本身由 test_agent_access_gate.py
+# 覆盖。这里显式设置 allow_all，绝不让「默认锁死」被测试悄悄放宽。
+pytestmark = pytest.mark.usefixtures("agent_access_open")
+
 
 @pytest.fixture
 def env(monkeypatch, tmp_path, import_root, test_database):

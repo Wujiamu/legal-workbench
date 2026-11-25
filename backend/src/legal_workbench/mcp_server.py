@@ -3,17 +3,30 @@
 stdout carries protocol data only; all logging goes to stderr.  Destructive
 operations (deleting originals, arbitrary SQL, restoring backups) are
 deliberately absent.
+
+**Default-deny fence.**  An MCP client is a model, not the 承办人, so every tool
+that names a case runs :func:`legal_workbench.agent_access.require_case_allowed`
+*before* it opens a session or calls a service (``_case_guard``).  With no
+policy file the workbench is closed: the only thing an unauthorised caller can
+do is ``list_cases(limit=0)`` as a liveness probe and read the rule sets.  The
+import-time check at the bottom of this module fails the process if any tool
+with a ``case_id`` parameter is registered without that guard, so a new tool
+cannot quietly ship without the fence.  Nothing here can change the policy:
+there is no grant/unlock/allow tool, by design.
 """
 from __future__ import annotations
 
+import functools
+import inspect
 import logging
 import sys
 import uuid
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from mcp.server.fastmcp import FastMCP
 
-from . import analysis, source_notes, audit, cases, imports, jobs, materials, parsing, progress, search
+from . import (agent_access, analysis, audit, cases, imports, jobs, materials, parsing,
+               progress, search, source_notes)
 from .config import load_settings
 from .db import get_session_factory
 from .errors import ErrorCode, WorkbenchError
@@ -57,9 +70,64 @@ def _run(fn):
         session.close()
 
 
+def _case_guard(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Refuse an unauthorised ``case_id`` before the tool does anything else.
+
+    The fence has to be *outside* the body: every tool below opens a session and
+    calls a service, so checking inside would already have read from the
+    database.  ``require_case_allowed`` validates the UUID first (``invalid_input``
+    for a malformed one) and then raises ``forbidden``; either way the message
+    names the exact ``agent-grant`` command and never a case title.
+
+    ``functools.wraps`` keeps the signature, which is what FastMCP reads to build
+    the tool's JSON schema; ``__case_guard__`` is the marker the startup audit
+    checks, so a future tool cannot be registered without the fence.
+    """
+    signature = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    def guarded(*args: Any, **kwargs: Any) -> Any:
+        bound = signature.bind_partial(*args, **kwargs)
+        raw = bound.arguments.get("case_id")
+        if raw is None:
+            raise WorkbenchError(ErrorCode.INVALID_INPUT, "缺少 case_id",
+                                 {"field": "case_id"})
+        agent_access.require_case_allowed(raw)
+        return fn(*args, **kwargs)
+
+    guarded.__case_guard__ = True  # type: ignore[attr-defined]
+    return guarded
+
+
+def _fence_audit() -> list[str]:
+    """Names of registered tools that take ``case_id`` but carry no fence."""
+    unguarded: list[str] = []
+    for tool in server._tool_manager.list_tools():  # noqa: SLF001 - the only listing API
+        properties = (tool.parameters or {}).get("properties") or {}
+        if "case_id" not in properties:
+            continue
+        if not getattr(tool.fn, "__case_guard__", False):
+            unguarded.append(tool.name)
+    return unguarded
+
+
+def _enforce_case_fence() -> None:
+    """Fail the process at import time if any case tool skipped the fence.
+
+    A missing guard is a silent data leak, not a style problem, so this is a
+    startup failure rather than a warning in a log nobody reads.
+    """
+    unguarded = _fence_audit()
+    if unguarded:
+        raise RuntimeError(
+            "MCP 访问围栏缺失：以下工具带 case_id 却未加 @_case_guard："
+            + "、".join(unguarded))
+
+
 @server.tool()
 def create_case(title: str, description: str | None = None) -> dict[str, Any]:
-    """创建一个新案件。"""
+    """创建一个新案件（默认禁止；须承办人在本机显式开启建案权限）。"""
+    agent_access.require_create_case_allowed()
     result = _run(lambda s: cases.create_case(s, title=title, description=description,
                                               actor="agent", entry="mcp"))
     return result.model_dump(mode="json")
@@ -67,12 +135,42 @@ def create_case(title: str, description: str | None = None) -> dict[str, Any]:
 
 @server.tool()
 def list_cases(offset: int = 0, limit: int = 50) -> dict[str, Any]:
-    """列出案件。"""
+    """列出案件。
+
+    默认锁死（deny_all）下只允许 `limit=0` 作连通探活，返回空列表且不带任何
+    案件信息；`limit>0` 直接拒绝。单案白名单（allowlist）下只返回已授权且确实
+    存在的案件，`total` 也只统计授权范围，绝不暴露库中其余案件的存在或数量。
+    """
+    # A malformed environment is a lock for a data call (see agent_access);
+    # ``get_access_policy`` is where the operator reads the real explanation.
+    try:
+        policy = agent_access.load_access_policy()
+    except WorkbenchError:
+        policy = agent_access.AccessPolicy(mode=agent_access.DENY_ALL,
+                                          source=agent_access.SOURCE_INVALID_CONFIG)
+    if policy.mode == agent_access.DENY_ALL:
+        if limit != 0:
+            raise WorkbenchError(
+                ErrorCode.FORBIDDEN,
+                "禁止列举案件（forbidden）：当前为默认锁死（deny_all），Agent 未获任何案件授权。"
+                "仅 list_cases(limit=0) 可作连通探活。请由承办人在本机执行 "
+                f"{agent_access.grant_command()} 临时放行具体案件。",
+                {"mode": policy.mode, "action": "list_cases",
+                 "remedy": agent_access.grant_command()},
+            )
+        return {"items": [], "offset": 0, "limit": 0, "total": 0, "mode": policy.mode}
+    if policy.mode == agent_access.ALLOWLIST:
+        result = _run(lambda s: cases.list_cases_by_ids(
+            s, policy.allowed_case_ids, offset=offset, limit=limit))
+        payload = result.model_dump(mode="json")
+        payload["mode"] = policy.mode
+        return payload
     result = _run(lambda s: cases.list_cases(s, offset=offset, limit=limit))
     return result.model_dump(mode="json")
 
 
 @server.tool()
+@_case_guard
 def import_materials(case_id: str, source_path: str, source_label: str,
                      request_key: str) -> dict[str, Any]:
     """从 IMPORT_ROOTS 允许的服务器路径导入材料目录或文件。"""
@@ -84,6 +182,7 @@ def import_materials(case_id: str, source_path: str, source_label: str,
 
 
 @server.tool()
+@_case_guard
 def list_materials(case_id: str, category: str | None = None, offset: int = 0,
                    limit: int = 50) -> dict[str, Any]:
     """列出案件材料及解析覆盖。"""
@@ -96,6 +195,7 @@ def list_materials(case_id: str, category: str | None = None, offset: int = 0,
 
 
 @server.tool()
+@_case_guard
 def update_classification(case_id: str, material_id: str, category: str,
                           expected_revision: int) -> dict[str, Any]:
     """修改材料分类（自由文本，空值归为待分类）。"""
@@ -106,6 +206,7 @@ def update_classification(case_id: str, material_id: str, category: str,
 
 
 @server.tool()
+@_case_guard
 def create_working_copy(case_id: str, file_version_id: str, display_name: str) -> dict[str, Any]:
     """基于某个文件版本创建可编辑工作副本。"""
     working_id, relative = _run(lambda s: materials.create_working_copy(
@@ -116,6 +217,7 @@ def create_working_copy(case_id: str, file_version_id: str, display_name: str) -
 
 
 @server.tool()
+@_case_guard
 def register_file_version(case_id: str, working_copy_id: str,
                           expected_revision: int) -> dict[str, Any]:
     """把工作副本登记为新的不可变文件版本并排队解析。"""
@@ -127,6 +229,7 @@ def register_file_version(case_id: str, working_copy_id: str,
 
 
 @server.tool()
+@_case_guard
 def search_case(case_id: str, query: str, mode: str = "literal", scope: str = "originals",
                 currency: str | None = None, offset: int = 0,
                 limit: int = 20) -> dict[str, Any]:
@@ -138,6 +241,7 @@ def search_case(case_id: str, query: str, mode: str = "literal", scope: str = "o
 
 
 @server.tool()
+@_case_guard
 def read_source(case_id: str, source_ref: str, context_chars: int = 200) -> dict[str, Any]:
     """按 source_ref 读取不可变片段及前后上下文。"""
     result = _run(lambda s: search.read_source(
@@ -147,6 +251,7 @@ def read_source(case_id: str, source_ref: str, context_chars: int = 200) -> dict
 
 
 @server.tool()
+@_case_guard
 def annotate_file(case_id: uuid.UUID, file_version_id: uuid.UUID,
                   kind: Literal["transcription", "interpretation"], body: str,
                   page: int | None = None) -> dict[str, Any]:
@@ -158,6 +263,7 @@ def annotate_file(case_id: uuid.UUID, file_version_id: uuid.UUID,
 
 
 @server.tool()
+@_case_guard
 def list_annotations(case_id: uuid.UUID, query: str | None = None,
                      file_version_id: uuid.UUID | None = None,
                      offset: int = 0, limit: int = 50) -> dict[str, Any]:
@@ -169,6 +275,7 @@ def list_annotations(case_id: uuid.UUID, query: str | None = None,
 
 
 @server.tool()
+@_case_guard
 def get_job_status(case_id: str, job_id: str) -> dict[str, Any]:
     """查询任务状态、进度与逐项错误。"""
     result = _run(lambda s: jobs.get_job_status(
@@ -177,6 +284,7 @@ def get_job_status(case_id: str, job_id: str) -> dict[str, Any]:
 
 
 @server.tool()
+@_case_guard
 def get_index_status(case_id: str) -> dict[str, Any]:
     """查询案件索引覆盖数量。"""
     result = _run(lambda s: search.get_index_status(s, case_id=_uuid(case_id, "case_id")))
@@ -184,6 +292,7 @@ def get_index_status(case_id: str) -> dict[str, Any]:
 
 
 @server.tool()
+@_case_guard
 def save_analysis(case_id: str, title: str, content: str, statement_kind: str,
                   source_refs: list[str], analysis_id: str | None = None,
                   expected_revision: int | None = None) -> dict[str, Any]:
@@ -198,6 +307,7 @@ def save_analysis(case_id: str, title: str, content: str, statement_kind: str,
 
 
 @server.tool()
+@_case_guard
 def review_analysis(case_id: str, analysis_id: str, version_id: str,
                     expected_revision: int, review_status: str) -> dict[str, Any]:
     """标记分析版本审核状态（pending/approved/rejected），不修改正文。"""
@@ -209,6 +319,7 @@ def review_analysis(case_id: str, analysis_id: str, version_id: str,
 
 
 @server.tool()
+@_case_guard
 def get_analysis_version(case_id: str, analysis_id: str, version_id: str) -> dict[str, Any]:
     """读取某个分析版本的正文与来源引用。"""
     result = _run(lambda s: analysis.get_analysis_version(
@@ -218,6 +329,7 @@ def get_analysis_version(case_id: str, analysis_id: str, version_id: str) -> dic
 
 
 @server.tool(name="export-chart-audit-bundle")
+@_case_guard
 def export_chart_audit_bundle(case_id: str, chart_type: Literal["graph", "claims"],
                               target_id: str, profile: Literal["client", "court"],
                               snapshot_id: str | None = None) -> dict[str, Any]:
@@ -233,9 +345,24 @@ def export_chart_audit_bundle(case_id: str, chart_type: Literal["graph", "claims
     return result.model_dump(mode="json")
 
 
+@server.tool()
+def get_access_policy() -> dict[str, Any]:
+    """读取当前 Agent 访问策略（只读自检）。
+
+    只返回模式、已授权案件数、是否允许建案与来源，不返回任何案件标题或
+    case_id。MCP 侧没有、也不会有任何授权、解锁或修改策略的工具：授权只能由
+    承办人在本机终端执行 `scripts/lwb agent-grant <case_id>`。
+    """
+    return agent_access.policy_summary()
+
+
 def main() -> None:
-    # The MCP server is a single local process serving one caller: attribute the
-    # whole stdio session to it rather than threading an actor through 14 tools.
+    """Run the stdio MCP server.
+
+    The MCP server is a single local process serving one caller: attribute the
+    whole stdio session to it rather than threading an actor through 14 tools.
+    stdout belongs to the protocol; every diagnostic already goes to stderr.
+    """
     audit.set_context(actor="mcp", request_id=uuid.uuid4())
     server.run(transport="stdio")
 
@@ -244,6 +371,7 @@ def main() -> None:
 # 只暴露读取与 agent_commands 白名单内的写命令；确认/撤回不在此提供（K5/6.3）。
 
 @server.tool()
+@_case_guard
 def get_progress(case_id: str) -> dict[str, Any]:
     """读取案件进度快照：节点树、关系、关联、待确认变更与变化序号。"""
     return _run(lambda s: progress.get_progress(s, _uuid(case_id, "case_id"))).model_dump(mode="json")
@@ -257,6 +385,7 @@ def get_progress_rules() -> dict[str, Any]:
 
 
 @server.tool()
+@_case_guard
 def progress_add_node(case_id: str, kind: str, title: str, request_key: str,
                       parent_id: str | None = None, state: str | None = None,
                       note: str | None = None) -> dict[str, Any]:
@@ -269,6 +398,7 @@ def progress_add_node(case_id: str, kind: str, title: str, request_key: str,
 
 
 @server.tool()
+@_case_guard
 def progress_update_node(case_id: str, node_id: str, expected_revision: int,
                          title: str | None = None, state: str | None = None,
                          note: str | None = None, clear_note: bool = False) -> dict[str, Any]:
@@ -293,6 +423,7 @@ def progress_update_node(case_id: str, node_id: str, expected_revision: int,
 
 
 @server.tool()
+@_case_guard
 def progress_set_active_stage(case_id: str, stage_id: str, expected_revision: int) -> dict[str, Any]:
     """把某阶段设为进行中（同程序原进行中阶段记为已完成，一条变更）。"""
     payload = SetActiveStageInput(case_id=_uuid(case_id, "case_id"),
@@ -302,6 +433,7 @@ def progress_set_active_stage(case_id: str, stage_id: str, expected_revision: in
 
 
 @server.tool()
+@_case_guard
 def progress_move_node(case_id: str, node_id: str, expected_revision: int,
                        new_parent_id: str | None = None,
                        before_node_id: str | None = None) -> dict[str, Any]:
@@ -314,6 +446,7 @@ def progress_move_node(case_id: str, node_id: str, expected_revision: int,
 
 
 @server.tool()
+@_case_guard
 def progress_insert_fragment(case_id: str, fragment_key: str,
                              parent_id: str | None = None,
                              before_node_id: str | None = None) -> dict[str, Any]:
@@ -325,6 +458,7 @@ def progress_insert_fragment(case_id: str, fragment_key: str,
 
 
 @server.tool()
+@_case_guard
 def progress_remove_node(case_id: str, node_id: str, expected_revision: int) -> dict[str, Any]:
     """软删除进度节点（须先移除或移动子节点）。"""
     payload = NodeRevisionInput(case_id=_uuid(case_id, "case_id"), node_id=_uuid(node_id, "node_id"),
@@ -333,6 +467,7 @@ def progress_remove_node(case_id: str, node_id: str, expected_revision: int) -> 
 
 
 @server.tool()
+@_case_guard
 def progress_add_relation(case_id: str, from_node_id: str, to_node_id: str,
                           relation_type: str, note: str | None = None) -> dict[str, Any]:
     """建立非包含关系（首版 causes/relates）。"""
@@ -344,6 +479,7 @@ def progress_add_relation(case_id: str, from_node_id: str, to_node_id: str,
 
 
 @server.tool()
+@_case_guard
 def progress_link_material(case_id: str, node_id: str, material_id: str) -> dict[str, Any]:
     """把进度节点关联到同案材料。"""
     payload = LinkNodeInput(case_id=_uuid(case_id, "case_id"), node_id=_uuid(node_id, "node_id"),
@@ -352,6 +488,7 @@ def progress_link_material(case_id: str, node_id: str, material_id: str) -> dict
 
 
 @server.tool()
+@_case_guard
 def progress_link_analysis(case_id: str, node_id: str, analysis_id: str) -> dict[str, Any]:
     """把进度节点关联到同案分析（审查：P3 入口覆盖）。"""
     payload = LinkNodeInput(case_id=_uuid(case_id, "case_id"), node_id=_uuid(node_id, "node_id"),
@@ -360,6 +497,7 @@ def progress_link_analysis(case_id: str, node_id: str, analysis_id: str) -> dict
 
 
 @server.tool()
+@_case_guard
 def progress_link_annotation(case_id: str, node_id: str, annotation_id: str) -> dict[str, Any]:
     """把进度节点关联到同案标注（审查：P3 入口覆盖）。"""
     payload = LinkNodeInput(case_id=_uuid(case_id, "case_id"), node_id=_uuid(node_id, "node_id"),
@@ -368,6 +506,7 @@ def progress_link_annotation(case_id: str, node_id: str, annotation_id: str) -> 
 
 
 @server.tool()
+@_case_guard
 def progress_remove_relation(case_id: str, relation_id: str) -> dict[str, Any]:
     """移除非包含关系（软删除，审查：P3 入口覆盖）。"""
     payload = RemoveRelationInput(case_id=_uuid(case_id, "case_id"),
@@ -376,6 +515,7 @@ def progress_remove_relation(case_id: str, relation_id: str) -> dict[str, Any]:
 
 
 @server.tool()
+@_case_guard
 def progress_unlink(case_id: str, link_id: str) -> dict[str, Any]:
     """解除进度节点的业务关联（审查：P3 入口覆盖）。"""
     payload = UnlinkInput(case_id=_uuid(case_id, "case_id"), link_id=_uuid(link_id, "link_id"))
@@ -387,6 +527,7 @@ def progress_unlink(case_id: str, link_id: str) -> dict[str, Any]:
 # 快照冻结/恢复、客户同意、证据复核与确认/撤回一律不在此提供（D3 / 检查清单 2）。
 
 @server.tool()
+@_case_guard
 def get_graph(case_id: str, graph_id: str | None = None) -> dict[str, Any]:
     """读取关系图工作区：主体、别名、关系、出处、分图、布局、快照、目录与待确认变更。"""
     from . import graph
@@ -403,6 +544,7 @@ def get_graph_rules() -> dict[str, Any]:
 
 
 @server.tool()
+@_case_guard
 def get_graph_snapshot(case_id: str, snapshot_id: str) -> dict[str, Any]:
     """读取一份已冻结快照（只读；冻结内容不可修改）。"""
     from . import graph
@@ -412,6 +554,7 @@ def get_graph_snapshot(case_id: str, snapshot_id: str) -> dict[str, Any]:
 
 
 @server.tool()
+@_case_guard
 def graph_removal_impact(case_id: str, entity_id: str | None = None,
                          relation_id: str | None = None) -> dict[str, Any]:
     """删除主体/关系前查询受影响的图清单与数量。"""
@@ -424,6 +567,7 @@ def graph_removal_impact(case_id: str, entity_id: str | None = None,
 
 
 @server.tool()
+@_case_guard
 def graph_add_entity(case_id: str, kind: str, name: str, request_key: str,
                      roles: list[str] | None = None, note: str | None = None,
                      graph_id: str | None = None) -> dict[str, Any]:
@@ -438,6 +582,7 @@ def graph_add_entity(case_id: str, kind: str, name: str, request_key: str,
 
 
 @server.tool()
+@_case_guard
 def graph_update_entity(case_id: str, entity_id: str, expected_revision: int,
                         kind: str | None = None, name: str | None = None,
                         roles: list[str] | None = None, note: str | None = None,
@@ -477,6 +622,7 @@ def _claim_category(value: str) -> str:
 
 
 @server.tool()
+@_case_guard
 def get_claims(case_id: str) -> dict[str, Any]:
     """读取案件诉请金额快照：分组、金额项、组小计、分币种总计、待确认候选与序号。"""
     from . import claims
@@ -484,6 +630,7 @@ def get_claims(case_id: str) -> dict[str, Any]:
 
 
 @server.tool()
+@_case_guard
 def claim_amount_candidates(case_id: str, query: str | None = None) -> dict[str, Any]:
     """检索本案已抽取的金额精确值候选（带出处片段/材料），用于带入金额。"""
     from . import claims
@@ -492,6 +639,7 @@ def claim_amount_candidates(case_id: str, query: str | None = None) -> dict[str,
 
 
 @server.tool()
+@_case_guard
 def claim_add_group(case_id: str, title: str, request_key: str, currency: str = "CNY",
                     include_in_total: bool = True, note: str | None = None) -> dict[str, Any]:
     """提交诉请分组候选（进入待确认，人工确认后才写入明细）。必须带 request_key。"""
@@ -504,6 +652,7 @@ def claim_add_group(case_id: str, title: str, request_key: str, currency: str = 
 
 
 @server.tool()
+@_case_guard
 def graph_add_alias(case_id: str, entity_id: str, alias: str) -> dict[str, Any]:
     """给主体加别名（同名不自动合并，重复别名被拒）。"""
     from . import graph
@@ -514,6 +663,7 @@ def graph_add_alias(case_id: str, entity_id: str, alias: str) -> dict[str, Any]:
 
 
 @server.tool()
+@_case_guard
 def graph_add_relation(case_id: str, from_entity_id: str, to_entity_id: str, kind: str,
                        credibility: str, request_key: str, label: str | None = None,
                        directed: bool = True, note: str | None = None,
@@ -541,6 +691,7 @@ def graph_add_relation(case_id: str, from_entity_id: str, to_entity_id: str, kin
 
 
 @server.tool()
+@_case_guard
 def graph_update_relation(case_id: str, relation_id: str, expected_revision: int,
                           kind: str | None = None, label: str | None = None,
                           credibility: str | None = None, directed: bool | None = None,
@@ -565,6 +716,7 @@ def graph_update_relation(case_id: str, relation_id: str, expected_revision: int
 
 
 @server.tool()
+@_case_guard
 def graph_add_source(case_id: str, request_key: str, proves: str | None = None,
                      entity_id: str | None = None, relation_id: str | None = None,
                      segment_id: str | None = None, material_id: str | None = None,
@@ -585,6 +737,7 @@ def graph_add_source(case_id: str, request_key: str, proves: str | None = None,
 
 
 @server.tool()
+@_case_guard
 def graph_create_graph(case_id: str, title: str, request_key: str,
                        description: str | None = None) -> dict[str, Any]:
     """新建一张命名关系图（一案多图；主体与关系仍为案件级共享）。"""
@@ -596,6 +749,7 @@ def graph_create_graph(case_id: str, title: str, request_key: str,
 
 
 @server.tool()
+@_case_guard
 def graph_update_graph(case_id: str, graph_id: str, expected_revision: int,
                        title: str | None = None, description: str | None = None) -> dict[str, Any]:
     """重命名关系图或修改说明（CAS）。"""
@@ -611,6 +765,7 @@ def graph_update_graph(case_id: str, graph_id: str, expected_revision: int,
 
 
 @server.tool()
+@_case_guard
 def graph_add_to_graph(case_id: str, graph_id: str, entity_ids: list[str] | None = None,
                        relation_ids: list[str] | None = None) -> dict[str, Any]:
     """把案件主体/关系加入某张图；关系的两端主体会自动纳入本图。"""
@@ -624,6 +779,7 @@ def graph_add_to_graph(case_id: str, graph_id: str, entity_ids: list[str] | None
 
 
 @server.tool()
+@_case_guard
 def get_evidence_catalog(case_id: str) -> dict[str, Any]:
     """读取证据目录：分组、条目、绑定、材料清单与当前编号。"""
     from . import evidence_catalog
@@ -632,6 +788,7 @@ def get_evidence_catalog(case_id: str) -> dict[str, Any]:
 
 
 @server.tool()
+@_case_guard
 def evidence_add_group(case_id: str, title: str, request_key: str,
                        purpose: str | None = None) -> dict[str, Any]:
     """新建证据分组（Agent 修改进入待确认）。"""
@@ -644,6 +801,7 @@ def evidence_add_group(case_id: str, title: str, request_key: str,
 
 
 @server.tool()
+@_case_guard
 def evidence_add_item(case_id: str, group_id: str, title: str, request_key: str,
                       purpose: str | None = None) -> dict[str, Any]:
     """新建证据条目（Agent 修改进入待确认）。"""
@@ -657,6 +815,7 @@ def evidence_add_item(case_id: str, group_id: str, title: str, request_key: str,
 
 
 @server.tool()
+@_case_guard
 def evidence_update_item(case_id: str, item_id: str, expected_revision: int,
                          title: str | None = None, purpose: str | None = None) -> dict[str, Any]:
     """修改证据条目的名称或证明目的（CAS）。"""
@@ -673,6 +832,7 @@ def evidence_update_item(case_id: str, item_id: str, expected_revision: int,
 
 
 @server.tool()
+@_case_guard
 def evidence_add_binding(case_id: str, item_id: str, material_id: str, request_key: str,
                          page_start: int | None = None,
                          page_end: int | None = None) -> dict[str, Any]:
@@ -688,6 +848,7 @@ def evidence_add_binding(case_id: str, item_id: str, material_id: str, request_k
 
 
 @server.tool()
+@_case_guard
 def evidence_import_catalog(case_id: str, import_material_id: str, rows: list[dict[str, Any]],
                             request_key: str) -> dict[str, Any]:
     """提交外部 Word/Excel 目录解析出的草稿（待确认，确认前不参与编号）。"""
@@ -702,6 +863,7 @@ def evidence_import_catalog(case_id: str, import_material_id: str, rows: list[di
 
 
 @server.tool()
+@_case_guard
 def claim_update_group(case_id: str, group_id: str, expected_revision: int, request_key: str,
                        title: str | None = None, currency: str | None = None,
                        include_in_total: bool | None = None, note: str | None = None,
@@ -733,6 +895,7 @@ def claim_update_group(case_id: str, group_id: str, expected_revision: int, requ
 
 
 @server.tool()
+@_case_guard
 def claim_add_item(case_id: str, group_id: str, title: str, category: str,
                    amount_cents: StrictCents, request_key: str, calc_note: str | None = None,
                    segment_id: str | None = None, material_id: str | None = None,
@@ -751,6 +914,7 @@ def claim_add_item(case_id: str, group_id: str, title: str, category: str,
 
 
 @server.tool()
+@_case_guard
 def claim_update_item(case_id: str, item_id: str, expected_revision: int, request_key: str,
                       title: str | None = None, category: str | None = None,
                       amount_cents: StrictCents | None = None, calc_note: str | None = None,
@@ -788,6 +952,12 @@ def claim_update_item(case_id: str, item_id: str, expected_revision: int, reques
                                    changes=ClaimItemChanges(**fields),
                                    request_key=request_key)
     return _run(lambda s: claims.update_item(s, payload, actor="agent", entry="mcp")).model_dump(mode="json")
+
+
+# Registration is complete at this point, so the fence audit can run once at
+# import: a tool that takes ``case_id`` without ``@_case_guard`` aborts the
+# process instead of quietly serving an unauthorised read.
+_enforce_case_fence()
 
 
 if __name__ == "__main__":

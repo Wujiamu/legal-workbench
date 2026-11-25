@@ -346,9 +346,11 @@ dependencies = [
     { name = "pillow" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
+    { name = "pypdf" },
     { name = "pypdfium2" },
     { name = "python-docx" },
     { name = "rapidocr-onnxruntime" },
+    { name = "reportlab" },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
 ]
@@ -356,7 +358,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
-    { name = "reportlab" },
 ]
 
 [package.metadata]
@@ -369,18 +370,17 @@ requires-dist = [
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.2.9" },
     { name = "pydantic", specifier = "==2.11.5" },
+    { name = "pypdf", specifier = ">=5.0.0" },
     { name = "pypdfium2", specifier = ">=5.15.2" },
     { name = "python-docx", specifier = ">=1.2.0" },
     { name = "rapidocr-onnxruntime", specifier = ">=1.4.4" },
+    { name = "reportlab", specifier = ">=5.1.0" },
     { name = "sqlalchemy", specifier = "==2.0.41" },
     { name = "uvicorn", specifier = "==0.34.3" },
 ]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = "==8.4.1" },
-    { name = "reportlab", specifier = ">=5.1.0" },
-]
+dev = [{ name = "pytest", specifier = "==8.4.1" }]
 
 [[package]]
 name = "lxml"
@@ -733,6 +733,15 @@ wheels = [
 [package.optional-dependencies]
 crypto = [
     { name = "cryptography" },
+]
+
+[[package]]
+name = "pypdf"
+version = "7.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/96/5f/f41984a8150ec37c6ee50fa6fa1868d065337b65ba510a155848b2ce0b62/pypdf-7.1.1.tar.gz", hash = "sha256:2eff4e2fc5fb22a6d6711e6f1166cdc9ab5765d90cd0d77dfea3f4aa91a27b1d", size = 7221452, upload-time = "2026-11-18T11:51:08.608Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/ef/11ed995bd10a1632f7fea3da38ae8d42bc3ccc5b9969fe04d8620c844408/pypdf-7.1.1-py3-none-any.whl", hash = "sha256:04c5680d4b4cfa04ab505b09393fc949860c34a4dad6565284d11a2f5c3ce8b1", size = 421026, upload-time = "2026-11-18T11:51:06.563Z" },
 ]
 
 [[package]]

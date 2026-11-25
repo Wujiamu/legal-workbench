@@ -165,7 +165,7 @@ export function CoverageMatrix({
           text-align: left;
         }
         .coverage-matrix-cat-btn[aria-pressed="true"] {
-          background: #e8efec;
+          background: var(--accent-soft);
           color: var(--accent);
           font-weight: 700;
         }
@@ -186,24 +186,24 @@ export function CoverageMatrix({
           font-weight: 450;
         }
         .coverage-cell-btn.is-referenced:not(.is-zero) {
-          background: #e5f3ea;
-          border-color: #7cc79a;
-          color: #1c6b3c;
+          background: var(--ok-soft);
+          border-color: var(--ok-border);
+          color: var(--ok);
         }
         .coverage-cell-btn.is-unused:not(.is-zero) {
-          background: #eef2f8;
-          border-color: #9cb0d4;
-          color: #2f4b7c;
+          background: var(--info-soft);
+          border-color: var(--info-border);
+          color: var(--info);
         }
         .coverage-cell-btn.is-warn:not(.is-zero) {
-          background: #fbeaea;
-          border-color: #d8b4b4;
-          color: #8c2f2f;
+          background: var(--danger-soft);
+          border-color: var(--danger-border);
+          color: var(--danger);
         }
         .coverage-cell-btn.is-pending:not(.is-zero) {
-          background: #fdf3df;
-          border-color: #e0c060;
-          color: #8a5a00;
+          background: var(--warning-soft);
+          border-color: var(--warning-border);
+          color: var(--warning);
         }
         .coverage-cell-btn.is-active,
         .coverage-cell-btn[aria-pressed="true"] {

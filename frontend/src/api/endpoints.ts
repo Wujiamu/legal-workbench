@@ -35,23 +35,72 @@ export type TimeEntryOut = Schemas['TimeEntryOut'];
 export type TimeDayOutput = Schemas['TimeDayOutput'];
 export type DashboardDeadlineItem = Schemas['DashboardDeadlineItem'];
 export type DashboardDeadlinesOutput = Schemas['DashboardDeadlinesOutput'];
+export type CaseWorkStatus = Schemas['CaseSummary']['work_status'];
+export type CaseSortBy = 'next_due' | 'created_at' | 'case_number' | 'work_status' | 'title';
+export type CaseSortDir = 'asc' | 'desc';
+export type CaseDeadlineFilter = 'all' | 'overdue' | 'due_soon' | 'has_open';
+
+export interface CaseListFilters {
+  q?: string;
+  work_status?: CaseWorkStatus | '';
+  deadline_filter?: CaseDeadlineFilter | '';
+  sort_by?: CaseSortBy;
+  sort_dir?: CaseSortDir;
+}
+
+function caseFilterParams(filters?: CaseListFilters): Record<string, string | undefined> {
+  if (!filters) return {};
+  return {
+    q: filters.q?.trim() || undefined,
+    work_status: filters.work_status || undefined,
+    deadline_filter:
+      filters.deadline_filter && filters.deadline_filter !== 'all'
+        ? filters.deadline_filter
+        : undefined,
+    sort_by: filters.sort_by || undefined,
+    sort_dir: filters.sort_by && filters.sort_dir ? filters.sort_dir : undefined,
+  };
+}
 
 export const casesApi = {
-  dashboard: (offset: number, limit: number, signal?: AbortSignal) =>
-    api.get<Page<CaseOverview>>(`/api/v1/dashboard${query({ offset, limit })}`, signal),
+  dashboard: (offset: number, limit: number, signal?: AbortSignal, filters?: CaseListFilters) =>
+    api.get<Page<CaseOverview>>(
+      `/api/v1/dashboard${query({ offset, limit, ...caseFilterParams(filters) })}`, signal),
   /** 首页跨案期限时间轴：全部未归档案件的期限，不分页（不受 dashboard 50 条限制）。 */
   deadlines: (signal?: AbortSignal) =>
     api.get<DashboardDeadlinesOutput>('/api/v1/dashboard/deadlines', signal),
   overview: (caseId: string, signal?: AbortSignal) =>
     api.get<CaseOverview>(`/api/v1/cases/${caseId}`, signal),
+  updateMetadata: (caseId: string, body: Omit<Schemas['CaseMetadataInput'], 'case_id'>) =>
+    api.patch<CaseOverview>(`/api/v1/cases/${caseId}/metadata`, { case_id: caseId, ...body }),
   schedule: (caseId: string, body: Omit<Schemas['CaseScheduleInput'], 'case_id'>) =>
     api.patch<CaseOverview>(`/api/v1/cases/${caseId}/schedule`, { case_id: caseId, ...body }),
-  create: (title: string, description?: string) =>
-    api.post<Schemas['CreateCaseOutput']>('/api/v1/cases', { title, description }),
-  list: (offset: number, limit: number, signal?: AbortSignal, archived?: boolean) =>
+  create: (
+    title: string,
+    description?: string,
+    metadata?: {
+      case_number?: string | null;
+      plaintiff?: string | null;
+      defendant?: string | null;
+      work_status?: CaseWorkStatus;
+    },
+  ) =>
+    api.post<Schemas['CreateCaseOutput']>('/api/v1/cases', {
+      title,
+      description,
+      ...(metadata ?? {}),
+    }),
+  list: (
+    offset: number, limit: number, signal?: AbortSignal,
+    archived?: boolean, filters?: CaseListFilters,
+  ) =>
     api.get<Page<CaseSummary>>(
-      `/api/v1/cases${query({ offset, limit,
-        archived: archived === undefined ? undefined : String(archived) })}`, signal),
+      `/api/v1/cases${query({
+        offset,
+        limit,
+        archived: archived === undefined ? undefined : String(archived),
+        ...caseFilterParams(filters),
+      })}`, signal),
   archive: (caseId: string, expectedRevision: number) =>
     api.post<CaseOverview>(`/api/v1/cases/${caseId}/archive`,
       { case_id: caseId, expected_revision: expectedRevision }),
@@ -337,6 +386,7 @@ export const evidenceApi = {
   catalog: (caseId: string, signal?: AbortSignal) =>
     api.get<EvidenceCatalog>(`/api/v1/cases/${caseId}/evidence-catalog`, signal),
   exportUrl: (caseId: string) => `/api/v1/cases/${caseId}/evidence-catalog/export`,
+  bundleUrl: (caseId: string) => `/api/v1/cases/${caseId}/evidence-catalog/bundle`,
   /** 解析已上传到本案的目录文件（DOCX / XLSX / CSV），不写库。 */
   previewImport: (caseId: string, form: FormData, signal?: AbortSignal) =>
     api.upload<Schemas['ImportPreviewOutput']>(

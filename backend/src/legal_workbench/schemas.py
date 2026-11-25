@@ -99,9 +99,19 @@ class CaseInput(Contract):
     case_id: UUID
 
 
+CaseWorkStatus = Literal["normal", "need_materials", "need_sync", "waiting_external", "paused"]
+CaseDeadlineFilter = Literal["all", "overdue", "due_soon", "has_open"]
+CaseSortBy = Literal["next_due", "created_at", "case_number", "work_status", "title"]
+CaseSortDir = Literal["asc", "desc"]
+
+
 class CreateCaseInput(Contract):
     title: str = Field(min_length=1)
     description: str | None = None
+    case_number: str | None = Field(default=None, max_length=120)
+    plaintiff: str | None = Field(default=None, max_length=200)
+    defendant: str | None = Field(default=None, max_length=200)
+    work_status: CaseWorkStatus = "normal"
 
 
 class Deadline(Contract):
@@ -125,10 +135,22 @@ class CaseScheduleInput(CaseInput):
     deadlines: list[Deadline] = Field(max_length=200)
 
 
+class CaseMetadataInput(CaseInput):
+    expected_revision: int = Field(ge=0)
+    case_number: str | None = Field(default=None, max_length=120)
+    plaintiff: str | None = Field(default=None, max_length=200)
+    defendant: str | None = Field(default=None, max_length=200)
+    work_status: CaseWorkStatus = "normal"
+
+
 class CaseSummary(Contract):
     case_id: UUID
     title: str
     description: str | None
+    case_number: str | None = None
+    plaintiff: str | None = None
+    defendant: str | None = None
+    work_status: CaseWorkStatus = "normal"
     revision: int = Field(ge=0)
     created_at: UtcDatetime
     # 结案归档时间；非空即已归档（进度与材料只读）。
@@ -194,8 +216,16 @@ class CreateCaseOutput(Contract):
     revision: int = Field(ge=0)
 
 
-class ListCasesInput(Pagination):
-    pass
+class DashboardInput(Pagination):
+    q: str | None = None
+    work_status: CaseWorkStatus | None = None
+    deadline_filter: CaseDeadlineFilter | None = None
+    sort_by: CaseSortBy | None = None
+    sort_dir: CaseSortDir | None = None
+
+
+class ListCasesInput(DashboardInput):
+    archived: bool | None = None
 
 
 class ListCasesOutput(Contract):

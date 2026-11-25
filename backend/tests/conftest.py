@@ -25,6 +25,57 @@ TEST_DB_NAME = "legal_workbench_test"
 BASE = "http://127.0.0.1:8765"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def isolated_instance_pointer(tmp_path_factory):
+    """Never let a developer's real instance pointer steer the test suite.
+
+    ``config.resolve_home_dir()`` prefers ``~/.plainfolio/instance.json`` over the
+    checkout, so a machine that ran ``scripts/lwb register-instance`` would
+    otherwise redirect ``load_settings()`` — and every test that patches
+    ``config.ROOT`` — at the real installation.  Point the lookup at a path that
+    does not exist for the whole session; tests that exercise the pointer set
+    their own value with ``monkeypatch``.
+    """
+    pointer = tmp_path_factory.mktemp("instance") / "instance.json"
+    saved = {name: os.environ.get(name) for name in ("LWB_INSTANCE_CONFIG", "LWB_HOME")}
+    os.environ["LWB_INSTANCE_CONFIG"] = str(pointer)
+    os.environ.pop("LWB_HOME", None)
+    try:
+        yield pointer
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolated_agent_access_file(tmp_path_factory):
+    """Keep every test away from the real ``var/runtime/agent-access.json``.
+
+    The MCP fence reads the policy file on *every* tool call, so without this a
+    developer's own grant (or the absence of one) would change what the suite
+    observes.  The path is a session-wide file that does not exist; tests that
+    need a policy write it through ``agent_access`` with their own ``tmp_path``
+    or override the variable with ``monkeypatch``.
+    """
+    target = tmp_path_factory.mktemp("agent-access") / "agent-access.json"
+    saved = {name: os.environ.get(name) for name in
+             ("LWB_AGENT_ACCESS_FILE", "LWB_MCP_ALLOWED_CASES", "LWB_MCP_ACCESS_MODE")}
+    os.environ["LWB_AGENT_ACCESS_FILE"] = str(target)
+    os.environ.pop("LWB_MCP_ALLOWED_CASES", None)
+    os.environ.pop("LWB_MCP_ACCESS_MODE", None)
+    try:
+        yield target
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
 def _test_urls() -> tuple[str, str]:
     settings = load_settings()
     migrator = make_url(settings.migration_url)
@@ -107,6 +158,18 @@ def db(test_database):
     yield session
     session.rollback()
     session.close()
+
+
+@pytest.fixture
+def agent_access_open(monkeypatch):
+    """Open every case for tests that exercise MCP *business* behaviour.
+
+    The fence itself is covered by ``test_agent_access_gate.py``; the transport
+    suites call ``mcp_server.*`` directly to check that each tool still does its
+    job, so they opt into ``allow_all`` explicitly instead of relying on a
+    permissive default (the default stays ``deny_all``).
+    """
+    monkeypatch.setenv("LWB_MCP_ACCESS_MODE", "allow_all")
 
 
 @pytest.fixture

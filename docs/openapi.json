@@ -136,6 +136,132 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "work_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "normal",
+                    "need_materials",
+                    "need_sync",
+                    "waiting_external",
+                    "paused"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Work Status"
+            }
+          },
+          {
+            "name": "deadline_filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "all",
+                    "overdue",
+                    "due_soon",
+                    "has_open"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Deadline Filter"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "next_due",
+                    "created_at",
+                    "case_number",
+                    "work_status",
+                    "title"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "sort_dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Sort Dir"
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Archived"
+            }
           }
         ],
         "responses": {
@@ -247,6 +373,115 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "work_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "normal",
+                    "need_materials",
+                    "need_sync",
+                    "waiting_external",
+                    "paused"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Work Status"
+            }
+          },
+          {
+            "name": "deadline_filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "all",
+                    "overdue",
+                    "due_soon",
+                    "has_open"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Deadline Filter"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "next_due",
+                    "created_at",
+                    "case_number",
+                    "work_status",
+                    "title"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "sort_dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Sort Dir"
             }
           }
         ],
@@ -514,6 +749,122 @@
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/metadata": {
+      "patch": {
+        "operationId": "update_case_metadata",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseOverview"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseMetadataInput"
               }
             }
           }
@@ -14508,6 +14859,105 @@
         }
       }
     },
+    "/api/v1/cases/{case_id}/evidence-catalog/bundle": {
+      "get": {
+        "operationId": "export_evidence_bundle",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cases/{case_id}/evidence-catalog/import/preview": {
       "post": {
         "operationId": "preview_evidence_catalog_import",
@@ -18323,6 +18773,78 @@
         "title": "CaseInput",
         "type": "object"
       },
+      "CaseMetadataInput": {
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {
+            "format": "uuid",
+            "title": "Case Id",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "case_number": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Case Number"
+          },
+          "plaintiff": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Plaintiff"
+          },
+          "defendant": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Defendant"
+          },
+          "work_status": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "need_materials",
+              "need_sync",
+              "waiting_external",
+              "paused"
+            ],
+            "title": "Work Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id",
+          "expected_revision"
+        ],
+        "title": "CaseMetadataInput",
+        "type": "object"
+      },
       "CaseOverview": {
         "additionalProperties": false,
         "properties": {
@@ -18345,6 +18867,54 @@
               }
             ],
             "title": "Description"
+          },
+          "case_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Case Number"
+          },
+          "plaintiff": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Plaintiff"
+          },
+          "defendant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Defendant"
+          },
+          "work_status": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "need_materials",
+              "need_sync",
+              "waiting_external",
+              "paused"
+            ],
+            "title": "Work Status",
+            "type": "string"
           },
           "revision": {
             "minimum": 0,
@@ -18516,6 +19086,54 @@
               }
             ],
             "title": "Description"
+          },
+          "case_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Case Number"
+          },
+          "plaintiff": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Plaintiff"
+          },
+          "defendant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Defendant"
+          },
+          "work_status": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "need_materials",
+              "need_sync",
+              "waiting_external",
+              "paused"
+            ],
+            "title": "Work Status",
+            "type": "string"
           },
           "revision": {
             "minimum": 0,
@@ -21379,6 +21997,57 @@
             ],
             "default": null,
             "title": "Description"
+          },
+          "case_number": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Case Number"
+          },
+          "plaintiff": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Plaintiff"
+          },
+          "defendant": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Defendant"
+          },
+          "work_status": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "need_materials",
+              "need_sync",
+              "waiting_external",
+              "paused"
+            ],
+            "title": "Work Status",
+            "type": "string"
           }
         },
         "required": [
@@ -21648,6 +22317,110 @@
           "case_total"
         ],
         "title": "DashboardDeadlinesOutput",
+        "type": "object"
+      },
+      "DashboardInput": {
+        "additionalProperties": false,
+        "properties": {
+          "offset": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 50,
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "q": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Q"
+          },
+          "work_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "normal",
+                  "need_materials",
+                  "need_sync",
+                  "waiting_external",
+                  "paused"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Work Status"
+          },
+          "deadline_filter": {
+            "anyOf": [
+              {
+                "enum": [
+                  "all",
+                  "overdue",
+                  "due_soon",
+                  "has_open"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deadline Filter"
+          },
+          "sort_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "next_due",
+                  "created_at",
+                  "case_number",
+                  "work_status",
+                  "title"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort By"
+          },
+          "sort_dir": {
+            "anyOf": [
+              {
+                "enum": [
+                  "asc",
+                  "desc"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort Dir"
+          }
+        },
+        "title": "DashboardInput",
         "type": "object"
       },
       "DashboardOutput-Input": {
@@ -25488,6 +26261,102 @@
             "minimum": 1,
             "title": "Limit",
             "type": "integer"
+          },
+          "q": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Q"
+          },
+          "work_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "normal",
+                  "need_materials",
+                  "need_sync",
+                  "waiting_external",
+                  "paused"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Work Status"
+          },
+          "deadline_filter": {
+            "anyOf": [
+              {
+                "enum": [
+                  "all",
+                  "overdue",
+                  "due_soon",
+                  "has_open"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deadline Filter"
+          },
+          "sort_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "next_due",
+                  "created_at",
+                  "case_number",
+                  "work_status",
+                  "title"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort By"
+          },
+          "sort_dir": {
+            "anyOf": [
+              {
+                "enum": [
+                  "asc",
+                  "desc"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort Dir"
+          },
+          "archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Archived"
           }
         },
         "title": "ListCasesInput",

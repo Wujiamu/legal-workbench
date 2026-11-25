@@ -4,11 +4,43 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from .config import load_settings, resolve_pg_bin
+from .config import (is_packaged_mode, load_settings, resolve_bundle_root,
+                     resolve_home_dir, resolve_pg_bin)
 
 CLEAR_MAINTENANCE = (
     "python -m legal_workbench.cli clear-maintenance"
 )
+
+
+def tooling_status(*, packaged: bool, which=None, run=None) -> list[tuple[str, bool, str]]:
+    """``(label, ok, detail)`` for the source-build toolchain.
+
+    A packaged build ships the compiled frontend and the bundled interpreter, so
+    a missing ``node``/``npm`` is not a defect there; in a checkout it still is,
+    because ``npm run build`` is how the frontend gets built.
+    """
+    finder = shutil.which if which is None else which
+    runner = subprocess.run if run is None else run
+    win_kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
+    entries: list[tuple[str, bool, str]] = []
+    for name in ("node", "npm"):
+        path = finder(name)
+        version = (
+            runner(
+                [path, "--version"], capture_output=True, text=True,
+                encoding="utf-8", errors="replace", **win_kwargs,
+            ).stdout.strip()
+            if path else ""
+        )
+        if path and version:
+            entries.append(("OK", True, f"{name}: {version}"))
+        elif packaged:
+            entries.append(("SKIP", True,
+                            f"{name}: not required by a packaged build"
+                            + (f" (found {path})" if path else "")))
+        else:
+            entries.append(("MISSING", False, f"{name}: not found"))
+    return entries
 
 
 def _report_maintenance(settings) -> tuple[bool, str]:
@@ -46,18 +78,16 @@ def main() -> int:
         nonlocal ok
         print(f"{'OK' if passed else 'MISSING'} {label}: {detail}")
         ok &= passed
+    packaged = is_packaged_mode()
+    bundle_root = resolve_bundle_root()
+    print(f"OK PACKAGED: {'yes (frozen desktop build)' if packaged else 'no (source checkout)'}")
+    report("BUNDLE_ROOT", bundle_root.is_dir(), str(bundle_root))
+    report("HOME", resolve_home_dir().is_dir(), str(resolve_home_dir()))
     report("Python", sys.version_info[:2] == (3, 13), sys.version.split()[0])
-    win_kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
-    for name in ("node", "npm"):
-        path = shutil.which(name)
-        version = (
-            subprocess.run(
-                [path, "--version"], capture_output=True, text=True,
-                encoding="utf-8", errors="replace", **win_kwargs,
-            ).stdout.strip()
-            if path else "not found"
-        )
-        report(name, bool(path and version), version)
+    for state, passed, detail in tooling_status(packaged=packaged):
+        # ``state`` is already OK / MISSING / SKIP; ``detail`` names the tool.
+        print(f"{state} {detail}")
+        ok &= passed
     pg_bin = resolve_pg_bin(settings=settings)
     report("PG_BIN", bool(pg_bin), str(pg_bin) if pg_bin else "not found (install PostgreSQL 18 or set LWB_PG_BIN)")
     try:

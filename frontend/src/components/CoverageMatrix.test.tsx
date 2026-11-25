@@ -121,7 +121,9 @@ beforeEach(() => {
   coverageMatrixMock.mockResolvedValue(buildMatrix());
   indexStatusMock.mockResolvedValue({ complete: 4, partial: 0, failed: 1, pending: 0, unsupported: 1 });
   overviewMock.mockResolvedValue({
-    case_id: CASE_ID, title: 'TEST-ONLY 案卷', description: null, revision: 0,
+    case_id: CASE_ID, title: 'TEST-ONLY 案卷', description: null,
+    case_number: null, plaintiff: null, defendant: null, work_status: 'normal',
+    revision: 0,
     created_at: '2026-11-22T00:00:00Z', archived_at: null, stage: null, next_action: null,
     deadlines: [], active_stage: null,
   });

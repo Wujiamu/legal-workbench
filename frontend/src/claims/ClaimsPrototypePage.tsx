@@ -7,6 +7,7 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { AppBrand, ThemeSwitcher } from '../components/BrandMark';
 import { ClaimsPanel } from './ClaimsPanel';
 import { fixtureCandidates, FIXTURE_CASE_ID, FIXTURE_CASE_TITLE, buildClaimsFixture } from './fixtures';
 import { createMemoryClaimSource } from './memorySource';
@@ -66,9 +67,10 @@ export default function ClaimsPrototypePage() {
   return (
     <div className="claims-prototype">
       <header className="app-bar"><div className="app-bar-inner">
-        <span className="app-brand">法律工作台</span>
+        <AppBrand />
         <span className="app-section">诉请金额原型 · TEST-ONLY 合成案卷</span>
         <Link to="/">← 案件工作表</Link>
+        <ThemeSwitcher />
       </div></header>
       <main className="claims-main">
         <div className="page-heading">

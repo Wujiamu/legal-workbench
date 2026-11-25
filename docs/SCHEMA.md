@@ -1,12 +1,12 @@
 # 数据模型
 
-当前正式运行基线为 `v0.1.0`（`0008_claim_amounts`，零新增迁移）。表结构由 `backend/migrations/versions/` 定义，接口协议见 `backend/src/legal_workbench/schemas.py`。早期业务规则见 `V0.1_实施任务包.md` 第 2.3、2.4、2.6 节。进度模型的设计依据见 [进度通用节点模型](decisions/20261116-进度通用节点模型.md) 与 [界面与 Agent 共用业务命令](decisions/20261116-界面与Agent共用业务命令.md)。
+当前正式运行基线为 `0009_case_metadata`。表结构由 `backend/migrations/versions/` 定义，接口协议见 `backend/src/legal_workbench/schemas.py`。早期业务规则见 `V0.1_实施任务包.md` 第 2.3、2.4、2.6 节。进度模型的设计依据见 [进度通用节点模型](decisions/20261116-进度通用节点模型.md) 与 [界面与 Agent 共用业务命令](decisions/20261116-界面与Agent共用业务命令.md)。
 
 ## 表
 
 | 表 | 作用 | 可变 | 关键约束 |
 |---|---|---|---|
-| `cases` | 案件、当前节点、下一步、期限列表、归档时间 | 是 | `(id)` 主键，办理信息整体使用 revision CAS，旧记录的期限列表为空；`archived_at` 为空＝办理中，非空＝已归档（内容只读） |
+| `cases` | 案件名称、案号、原/被告、办理状态、节点、期限列表、归档时间 | 是 | `(id)` 主键；`work_status` 限 `normal`/`need_materials`/`need_sync`/`waiting_external`/`paused`；整体使用 revision CAS；`archived_at` 非空＝已归档（只读） |
 | `intakes` | 一次导入批次 | 是 | `(case_id, request_key)` 唯一，重放不新建批次 |
 | `intake_items` | 批次内单个文件 | 是 | `(intake_id, relative_source)` 唯一；`(case_id, material_id)` 唯一 |
 | `stored_objects` | 原件字节（按内容哈希） | 否 | `(case_id, sha256)` 唯一；`relative_path` 指向 `originals/<sha256>/source<ext>` |

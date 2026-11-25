@@ -4,6 +4,7 @@
  */
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router';
+import { AppBrand, ThemeSwitcher } from '../components/BrandMark';
 import { CaseNavBar } from '../components/CaseNavBar';
 import { evidenceApi } from '../api/endpoints';
 import { EvidenceCatalogPanel } from './EvidenceCatalogPanel';
@@ -41,9 +42,10 @@ function CaseEvidence({ caseId }: { caseId: string }) {
   return (
     <div className="graph-prototype">
       <header className="app-bar"><div className="app-bar-inner">
-        <span className="app-brand">法律工作台</span>
+        <AppBrand />
         <span className="app-section">证据目录</span>
         <Link to="/">← 案件工作表</Link>
+        <ThemeSwitcher />
       </div></header>
       <CaseNavBar caseId={caseId} active="evidence" />
       <main className="graph-main">
@@ -57,7 +59,7 @@ function CaseEvidence({ caseId }: { caseId: string }) {
         </div>
         {ws.archived ? (
           <p role="status" className="graph-archived">
-            本案已归档：证据目录只读；查看与 CSV 导出仍可用。
+            本案已归档：证据目录只读；查看、CSV 导出与一键装卷仍可用。
           </p>
         ) : null}
         {workspace.loadError ? (
@@ -78,6 +80,7 @@ function CaseEvidence({ caseId }: { caseId: string }) {
           run={workspace.run}
           runAgent={runAgent}
           exportHref={evidenceApi.exportUrl(caseId)}
+          bundleHref={evidenceApi.bundleUrl(caseId)}
           importSlot={(
             <EvidenceImportPanel caseId={caseId} ws={ws} readOnly={ws.archived}
               onImported={() => { void workspace.reload(); }} />

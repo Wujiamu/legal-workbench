@@ -19,6 +19,9 @@ from legal_workbench.schemas import (
 from .factories import build_material, create_case
 from .test_api import new_case
 
+# 访问围栏由 test_agent_access_gate.py 覆盖；本文件显式放开以验证工具业务行为。
+pytestmark = pytest.mark.usefixtures("agent_access_open")
+
 
 def _add(session, case_id, *, parent_id=None, kind="stage", title="阶段", state=None):
     return progress.add_node(session, AddNodeInput(

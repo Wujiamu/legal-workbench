@@ -105,7 +105,7 @@ function GroupCard({ data }: NodeProps) {
   const card = data as GroupData;
   return (
     <div className={`graph-group-box${card.dimmed ? ' dimmed' : ''}`}
-      style={{ background: card.group.color ?? '#eef3ef' }}>
+      style={{ background: card.group.color ?? 'var(--surface-subtle)' }}>
       <header className="graph-group-head">
         <button type="button" className="nodrag graph-group-toggle"
           aria-expanded={!card.group.collapsed}

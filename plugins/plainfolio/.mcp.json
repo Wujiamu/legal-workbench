@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "plainfolio": {
+      "command": "python3",
+      "args": [
+        "${PLUGIN_ROOT}/scripts/run-mcp.py"
+      ],
+      "env": {}
+    }
+  }
+}

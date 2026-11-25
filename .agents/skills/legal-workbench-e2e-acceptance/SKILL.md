@@ -7,6 +7,16 @@ description: 在已运行的本地法律工作台（http://127.0.0.1:8765）上�
 
 本规程用于指导独立验收 Agent 在**不触碰既有业务案件、不修改工作台源码及 `.env`**的前提下，使用 `acceptance_simulation/dossier/` 的全格式仿真案卷，在 `http://127.0.0.1:8765` 上逐项完成端到端真实操作与验收，并输出可复核的验收报告。
 
+## 授权前置与硬围栏纪律（必须先执行）
+
+1. **禁止默认连接、探测或列举工作台**。即使对话里提到案卷，在用户明确授权前也不得调用 `list_cases`、`list-cases`、`search_case` 或任何带 `case_id` 的工具与命令。工作台默认 `deny_all`（全局锁死），未获授权时除 `list_cases(limit=0)` 连通探活外一律返回 `forbidden`。
+2. **先向用户申请明确授权**，一次问清三件事：
+   - 本次允许访问的**具体目标案件**（`case_id` 或案件名称）；
+   - 当前所连接的对话模型**是否合规**接触该案材料——涉密、涉个人隐私或当事人禁止上云的案卷，**严禁**接入云端模型，只能用本机离线模型；
+   - 请用户**本人在本机终端**执行 `scripts/lwb agent-grant <case_id>`（Windows 为 `scripts\lwb.cmd agent-grant <case_id>`；桌面安装包用 `<可执行文件> --run-cli agent-grant <case_id>`）临时放行该单案。授权只能由承办人本人执行，你不得代跑，也不得要求用户把命令交给你来执行。
+3. **禁止绕过硬围栏**。若工具返回 `forbidden`（未获授权或处于 `deny_all`），立即停止该案的全部操作并如实告知用户「需由您在本机授权」。**严禁**改用 Shell / Python 直连数据库、读取 `var/data`、读取 `.env`、改写 `var/runtime/agent-access.json`，或改走 CLI / HTTP / 另一个客户端绕过门禁；这些做法一律视为越权。
+4. **用完即锁**。任务结束回复用户时，提醒用户按需执行 `scripts/lwb agent-revoke <case_id>`（Windows 为 `scripts\lwb.cmd agent-revoke <case_id>`）收回该案权限，或执行 `scripts/lwb agent-lock` 全局锁死、收回全部权限。不要替用户判断「下次还要用，先留着」。
+
 ## 纪律与红线
 
 1. **专案隔离**：首先用 `create-case`（或浏览器新建案件）创建标题含 `TEST-ONLY 仿真验收专案` 的独立案件，记录其 `case_id`。**严禁向任何已有非本次新建的案件写入、修改或删除任何记录**。

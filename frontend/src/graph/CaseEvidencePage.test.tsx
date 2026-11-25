@@ -201,8 +201,52 @@ describe('真实案件证据目录页', () => {
     const panel = screen.getByLabelText('导入外部证据目录');
     expect(within(panel).getByText('案件已归档：目录导入只读。')).toBeTruthy();
     expect(screen.getByRole('link', { name: '下载 CSV 目录' })).toBeTruthy();
+    const bundleBtn = screen.getByRole('button', { name: '一键装卷（ZIP）' }) as HTMLButtonElement;
+    expect(bundleBtn.disabled).toBe(false);
     const edit = [...document.querySelectorAll('button')]
       .filter((button) => button.textContent === '编辑');
     expect(edit.every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
+  }, 20000);
+
+  it('一键装卷（ZIP）可触发下载并在服务端拒绝时提示原因', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const createUrl = vi.fn(() => 'blob:mock-zip');
+    const revokeUrl = vi.fn();
+    vi.stubGlobal('URL', { ...URL, createObjectURL: createUrl, revokeObjectURL: revokeUrl });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    fetchSpy.mockResolvedValueOnce(new Response(new Blob(['zipbytes']), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': "attachment; filename=\"bundle.zip\"; filename*=UTF-8''%E8%AF%81%E6%8D%AE%E5%8D%B7%E5%AE%97.zip",
+      },
+    }));
+
+    renderPage();
+    await waitFor(() => { expect(screen.getByText('股权转让协议')).toBeTruthy(); });
+    await userEvent.click(screen.getByRole('button', { name: '一键装卷（ZIP）' }));
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `/api/v1/cases/${CASE}/evidence-catalog/bundle`,
+        expect.objectContaining({ headers: { Accept: 'application/zip, application/json' } }),
+      );
+      expect(createUrl).toHaveBeenCalled();
+      expect(clickSpy).toHaveBeenCalled();
+      expect(screen.getByText(/已生成并开始下载证据卷宗包/)).toBeTruthy();
+    });
+
+    fetchSpy.mockResolvedValueOnce(new Response(
+      JSON.stringify({ message: '暂无已确认的证据条目，请先确认证据目录后再装卷' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    ));
+    await userEvent.click(screen.getByRole('button', { name: '一键装卷（ZIP）' }));
+    await waitFor(() => {
+      expect(screen.getByText(/暂无已确认的证据条目，请先确认证据目录后再装卷/)).toBeTruthy();
+    });
+
+    fetchSpy.mockRestore();
+    clickSpy.mockRestore();
+    vi.unstubAllGlobals();
   }, 20000);
 });

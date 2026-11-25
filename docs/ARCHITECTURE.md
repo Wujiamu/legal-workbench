@@ -1,6 +1,6 @@
 # 架构
 
-当前正式运行基线为 `v0.1.0`（迁移基线 `0008_claim_amounts`，零新增迁移）。应用与验收状态见 [后续步骤总台](NEXT_STEPS.md)。
+当前正式运行基线为 `v0.1.0` + `0009_case_metadata`（2026-11-24：素章 · PlainFolio 品牌重塑与五套实时主题切换，零新增迁移）。应用与验收状态见 [后续步骤总台](NEXT_STEPS.md)。
 
 本地、单用户、离线的案件材料工作台。一个 PostgreSQL 18 实例、一个 Python 服务进程、一个单 worker、一个静态前端；没有容器、云服务、遥测或外部 SaaS。
 
@@ -36,6 +36,7 @@
 | `graph.py` | 案件主体、别名、关系及出处，具名图和布局，冻结快照、同意记录及关系图变更复核 |
 | `graph_rules.py` | 主体和关系类型、关系可信状态、快照阶段、同意渠道以及 Agent 命令范围 |
 | `evidence_catalog.py` | 证据目录分组、条目与材料页码绑定，合规导入、复核、现行编号解析 |
+| `dossier_export.py` | 按中国法院纸质装订与电子立案标准生成双场景证据卷宗 ZIP（`00_证据合订卷宗.pdf`、`01_证据目录.docx/.csv`、`02_分项证据材料/*`） |
 | `claims.py` | 诉请金额分组、项目及同案出处，按币种汇总整数分和抵扣，记录可复核变更 |
 | `chart_export.py` | 跨图表“一源三态”（`working`/`client`/`court`）引用索引附表生成、硬门禁预检 `preflight_chart_export` 与只读复核审计包 `build_chart_audit_bundle` |
 | `graph_assist.py` | 只读关系图程序化助手：双主体全案共现、片段主体/精确值匹配、材料覆盖健康矩阵、孤儿机构差集、强指纹碰撞、候选主体消歧提取 |
@@ -43,6 +44,8 @@
 | `domain_changes.py` | 关系图、证据目录和诉请金额共享的域序号事务、变更差异、待确认记录与复核状态 |
 | `time_entries.py` | 案件工时开始、停止、补录、软删除与日汇总，跨日切段及 15 分钟计量 |
 | `config.py` | 读取 `.env` 与环境变量；`Settings` 中所有凭据字段 `repr=False` |
+| `runtime_paths.py` | 只读程序目录与可写数据目录的解析：打包根（`LWB_BUNDLE_ROOT` → 冻结资源根 → 仓库根）、平台用户数据目录、前端/Alembic/内嵌 PG18 与 OCR 模型的位置；平台数据目录**仅在打包态**启用 |
+| `desktop_launcher.py` | 冻结桌面入口：`--run-server` / `--run-worker` / `--run-mcp` / `--run-cli` / `--run-doctor` 自调用，首次自动建库、升级前备份＋迁移、单实例文件锁、`--status` / `--stop` / `--headless` / `--init-only` |
 | `db.py` | 引擎/会话、`begin_write`（维护共享锁）、`update_with_revision`（CAS） |
 | `models.py` | 全部 ORM 实体；案件子表一律带 `(case_id, …)` 组合外键 |
 | `storage.py` | 流式哈希、同盘暂存、`fsync` + `os.link` 无覆盖发布（POSIX / NTFS）、Windows 保留名清洗、回读校验、路径穿越与链接/Junction 拒绝 |
@@ -54,7 +57,8 @@
 | `analysis.py` | 不可变分析版本、`source_refs` 同案校验、审核状态 |
 | `coverage.py` | 覆盖统计：把"从未解析"与"解析失败/不支持"分开报告 |
 | `api/` | 路由、请求守卫（本机 Host 与同源 Origin）、文件响应头 |
-| `cli.py` / `mcp_server.py` | 外部 Agent 入口 |
+| `agent_access.py` | Agent 访问策略：`deny_all` / `allowlist` / `allow_all` 三态、单案白名单读写（`var/runtime/agent-access.json`，原子写入 + `0600`，无凭据）、`require_case_allowed` / `require_create_case_allowed` 硬门禁；文件损坏一律降级 `deny_all`，文件策略优先于环境变量 |
+| `cli.py` / `mcp_server.py` | 外部 Agent 入口。`mcp_server` 的全部 52 个带 `case_id` 工具都套 `_case_guard`（先校验 UUID 与授权，再开会话），导入期 `_enforce_case_fence()` 缺一个即启动失败；**不暴露任何授权/解锁工具**，只有只读自检 `get_access_policy` |
 | `consistency.py` / `backup.py` | 只读一致性检查、备份/校验/恢复 |
 | `frontend/src/api/types.ts` | 由 `docs/openapi.json` 生成，是前端类型的唯一来源；`endpoints.ts` 只做别名，不再手写字段 |
 
@@ -71,13 +75,14 @@ PDF 页预览复用存储完整性校验及 PDFium。来源读取使用历史解
 7. **进度命令化、变更记录与序号同事务**。每条进度写命令在同一短事务内写节点 CAS、变更记录（修改前/后值与修订号）、案件变化序号 +1 与审计；Agent 变更默认待确认，确认/撤回仅人工入口。同案写入由 `case_change_seq` 行 `FOR UPDATE` 串行化。层级/种类/状态只在 `progress_rules` 配置，数据库不写死。见 [界面与 Agent 共用业务命令](decisions/20261116-界面与Agent共用业务命令.md)、[进度通用节点模型](decisions/20261116-进度通用节点模型.md)。
 8. **单 worker**。`pg_try_advisory_lock` 抢不到立即退出；启动时把遗留 `running` 任务改回 `queued`。
 9. **写入顺序固定**：维护共享锁 → worker 会话锁 → 短事务。备份取维护排他锁，因此备份期间业务写入返回 `maintenance`。
+10. **Agent 默认无权限**。MCP 层的授权判断在数据库之前，且不依赖数据库状态：策略文件缺失或损坏都是 `deny_all`。授权状态与案件数据分开存放（`var/runtime/agent-access.json`），因此备份、恢复与迁移都不会把「某次临时授权」带进新环境。
 
 ## 文件布局
 
 ```
 var/
   postgres/                 PostgreSQL 数据目录（脚本创建，不托管给 brew services）
-  runtime/                  postgres.log、pgpass(0600)
+  runtime/                  postgres.log、pgpass(0600)、agent-access.json(0600，仅存在时；默认不存在)
   data/                     受管文件根（DATA_ROOT）
     cases/<case_id>/originals/<sha256>/source<ext>
     cases/<case_id>/versions/<file_version_id>/
@@ -90,6 +95,8 @@ var/
 
 原件按内容哈希存放，因此同案两份相同文件只占一份磁盘，但仍是两条材料、两个版本，各自可独立分类与重命名。
 
+打包态下这套 `var/` 整体位于平台用户数据目录（macOS `~/Library/Application Support/PlainFolio`，Windows `%LOCALAPPDATA%\PlainFolio`），程序文件在只读的安装目录内；两者的解析与首次初始化、升级前备份流程见 [桌面安装包文档](PACKAGING.md)。
+
 ## 外部 Agent 的数据流向
 
 Agent 通过 CLI 或 MCP 调用，进程在本机运行，读的是同一套数据库与受管目录：
@@ -98,10 +105,12 @@ Agent 通过 CLI 或 MCP 调用，进程在本机运行，读的是同一套数�
 - 传出：材料摘要、检索命中与上下文、提取文本、分析版本正文、任务状态。
 - 不传出：数据库连接串或凭据、其他案件的内容。
 - Agent 无法：删除原件、执行任意 SQL、覆盖式恢复备份、跨案读取（数据库与服务层都拒绝）。
+- **默认锁死**：MCP 层在进入任何数据库读取前先过 `agent_access` 门禁。策略文件不存在即 `deny_all`，除 `list_cases(limit=0)` 探活与两组规则外一律 `forbidden`；`allowlist` 下 `list_cases` 只返回已授权案件，`total` 只计授权范围，不泄露库中其他案件的存在与数量。授权只能由承办人在本机执行 `scripts/lwb agent-grant <case_id>`，用完 `agent-revoke` / `agent-lock` 收回。见 [Agent 访问硬围栏](changes/20261125-Agent访问硬围栏与授权收紧.md)。
 - 边界说明：工作台不内置 LLM 调用或任意代码执行沙箱；图表实质复核（[chart-substantive-review](skills/chart-substantive-review/SKILL.md)）与非标表格外部 Python 聚合（[nonstandard-table-script-sop](skills/nonstandard-table-script-sop/SKILL.md)）均通过 `docs/skills/` 模板交由外部 Agent 侧执行，经 `export-chart-audit-bundle` 与幂等待确认命令交互。
 
 ## 支持范围
 
+- 分发形态：源码态（现有方式）与桌面安装包（macOS `.dmg` / Windows `.exe`）。打包工程已实现并通过干跑校验，**未在真机构建、签名或安装**，实机清单见 [PACKAGING.md](PACKAGING.md)。
 - 平台：macOS（Apple Silicon 已实机验证）；Windows 10/11 已完成跨平台代码适配、桌面与生命周期启动器（`法律工作台.bat` / `scripts/lwb.cmd`）、线程版 OCR 超时保护及模拟单测，待在真实 Windows 宿主机按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 执行实机验收；Linux 未验证。
 - 规模：单机单用户。实测 1000 文件 / 10000 页 / 33100 段落 / 120305 个精确值，索引 128 秒，检索 P95 415ms（单字扫描 545ms）。
 - 并发：单 worker 串行处理；多客户端可并发读，写走 CAS 与数据库锁。

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "plainfolio",
+  "version": "0.1.0",
+  "description": "素章（PlainFolio）本地离线案件工作台的 Agent 插件包：默认锁死（deny_all），须由承办人在本机 agent-grant 按案授权后，才能通过 stdio MCP 检索案件、材料、索引与原文出处，保存带引用的分析，导出图表复核审计包；Agent 的写入一律是待确认提案，确认与撤回只由承办人完成。",
+  "license": "MIT",
+  "keywords": [
+    "legal",
+    "litigation",
+    "case-management",
+    "mcp",
+    "offline",
+    "plainfolio",
+    "素章"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "extensions": {
+    "com.openai": {
+      "category": "Legal",
+      "displayName": "素章 · PlainFolio",
+      "shortDescription": "本地离线案件工作台的 MCP 接入与办案 Skills。",
+      "longDescription": "素章（PlainFolio）把案卷、检索、证据目录、关系图与诉请金额留在一台电脑上。本插件包提供三件事：stdio MCP 服务（查询与提案写入）、办案操作 Skill、图表实质复核与非标表格脚本 SOP。安全模型是默认锁死：策略文件不存在时 Agent 无法列举、检索或读取任何案件，只能由承办人在本机执行 scripts/lwb agent-grant <case_id> 临时放行单案，用完 agent-revoke 或 agent-lock 收回。所有 Agent 写入默认进入待确认收件箱，原件只读且不可删除。",
+      "onboardingSkill": "./skills/plainfolio-workbench/SKILL.md"
+    }
+  }
+}

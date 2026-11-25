@@ -1,12 +1,14 @@
 # 测试报告
 
-当前正式运行基线为 `v0.1.0`（`0008_claim_amounts` + 2026-11-23 实机验收九项缺陷修复与启动器/开源发布收尾，零新增迁移）；本地原件验收记录归档于本机 `docs/reports/`（不随开源仓库分发）。
+当前正式运行基线为 `v0.1.0` + `0009_case_metadata`（2026-11-24：素章 · PlainFolio 品牌重塑与五套实时主题切换、自动装卷导出、首页案件元信息与筛选排序、面向律师 README 与动图演示）；本地原件验收记录归档于本机 `docs/reports/`（不随开源仓库分发）。
 
 ## 汇总
 
 | 项目 | 结果 |
 |---|---|
-| 最近全量通过 | **1029 项**（后端 **622 passed, 1 skipped, 1 warning in 156.06s** 真实 PG18 全量，唯一 skip 为仅限真 Windows 的 `test_real_windows_ntfs_junction_rejected`；前端 **407** 项 57 个测试文件 + `tsc --noEmit && vite build` 通过） |
+| 最近全量通过 | **1206 项**（后端真实 PG18 全量 **792 passed, 1 skipped**，唯一 skip 为仅限真 Windows 的 `test_real_windows_ntfs_junction_rejected` ＋ **前端 58 文件 414 passed**，含 `theme.test.tsx`，`tsc --noEmit && vite build` 通过） |
+| Agent 访问硬围栏（2026-11-25） | 新增 `test_agent_access_gate.py` **58 项**：默认锁死、52 个带 `case_id` 工具的反射审计、无授权写工具断言、`allowlist` 单案隔离与分页不泄露、`create_case` 默认拒绝、策略文件降级与 `0600`、`scripts/lwb agent-*` 五命令闭环与打包态 `--run-cli` 通路、`LWB_MCP_ALLOWED_CASES` / `LWB_MCP_ACCESS_MODE` 覆盖、真实 stdio 握手。本轮受影响 7 个测试集 **180 passed, 1 skipped**；四项反向验证均能检出对应缺陷。未在真实客户端跑会话，见 [变更单](changes/20261125-Agent访问硬围栏与授权收紧.md) |
+| 素章品牌与五套主题切换（2026-11-24） | 前端新增 `src/ui/theme.test.tsx`（4 项：`AppBrand` 渲染「素章」、5 套主题切换同步 DOM/`meta`/`localStorage`、跨标签页 `storage` 同步、`localStorage` 异常降级），`tsc --noEmit`、Vitest **58 文件 414 passed** 与 `vite build` 通过；`impeccable detect --json` 对 `workbench.css` / `BrandMark.tsx` / `theme.ts` 返回 `[]`（0 告警）；上传前双路独立代码审查并修复 DOCX 控制字符过滤、装卷提前释放 `FOR SHARE` 锁、CSV 公式注入防护、PDF 渲染失败保留原件、多帧容错与主题聚焦环对比度等问题后，受影响后端 7 个测试集（含新增 `test_dossier_export.py` 2 项回归）复测 **52 passed, 1 skipped** |
 | 数据库 | 真实 PostgreSQL 18（隔离验证），无 SQLite、无内存库 |
 | Windows 10/11 原生适配（2026-11-23） | 后端新增 `test_windows_compat.py`（8 项：Windows `PG_BIN`/`pg_env`、无 `SIGALRM` 线程超时、保留名/NTFS 路径守卫与真实 junction、脚本生命周期与 `lwb-launch` 锁/窗口/Browser/MessageBox、备份清单元/环境隔离）；前端新增 `src/ui/shortcuts.test.tsx`（2 项：`Win32` `Ctrl+Z` / `MacIntel` `⌘Z`）。经两轮独立代码审查闭环；`scripts/lwb doctor` 与 `generate_dossier` PDF 烟测通过；真实 Windows 宿主机实机验收按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 留作待办 |
 | `v0.1.0` 收尾与实机九项修复（2026-11-23） | 后端新增 `test_acceptance_fixes_20261123.py`（10 项全链路回归）与 `test_lwb_launch.py`（4 项断库恢复单测），前端新增 `CaseArchiveUiGuards.test.tsx`、`GraphCanvas.test.tsx` 等；两轮独立代码审查签收闭环；正式 `127.0.0.1:8765` 升级后 `check-consistency`（`ok: true`）、CLI/服务只读与拒写、内置 Chromium 四页实机复测通过 |
@@ -52,7 +54,12 @@
 | `test_audit.py` | 7 | 审计事件：各操作各记一条、不含正文/密钥/连接串、未知操作被 Python 与数据库双重拒绝、非 UUID target 稳定哈希 |
 | `test_api.py` | 22 | 未登录 401、错误 Host/Origin、错误 access key、CSRF 缺失/错误、cookie 属性、案件 CRUD、上传→worker→检索→read_source→下载、附件头、预览转义、中文文件名 ASCII fallback |
 | `test_case_workbench.py` | 5 | 办理期限排序及 CAS、PDF 对应页、图像对应帧、标注复核及跨案边界、取得方式回读；首页并行程序：两个程序各有进行中阶段全部展示、嵌套未完成工作按 position 正序计入（审查末节） |
-| `test_cli_mcp.py` | 9 | CLI 建案/列案 JSON、错误退出码 2、完整链路、分析保存审核、输出不含密钥、真实 MCP `stdio_client` 往返、跨案拒绝 |
+| `test_cli_mcp.py` | 9 | CLI 建案/列案 JSON、错误退出码 2、完整链路、分析保存审核、输出不含密钥、真实 MCP `stdio_client` 往返、跨案拒绝（文件级 `agent_access_open` 夹具显式放开访问围栏，围栏本身由 `test_agent_access_gate.py` 覆盖） |
+| `test_agent_access_gate.py` | 58 | 默认锁死（14 个代表性工具 + 52 工具反射审计）、无授权写工具、`allowlist` 单案隔离与分页不泄露全库、`create_case` 默认拒绝、策略文件降级/`0600`/无凭据、`scripts/lwb agent-*` 五命令与打包态 `--run-cli` 通路、环境变量覆盖、真实 stdio 握手 |
+| `test_plugin_package.py` | 58 | 插件清单与市场目录、无本机路径、Skill 镜像逐字一致、五份 Skill 的「授权前置与硬围栏纪律」前置与关键词、README 不再指向已移除的 DSH 插件 |
+| `test_packaging_runtime.py` | 42 | 打包态与源码态路径解析、内嵌 PG18/OCR 优先探测、冻结入口自复用命令、首次自动初始化与失败清理、升级前全量备份与失败中止、`stage_bundle.py` / `build_macos_dmg.py --dry-run` / `build_windows_exe.py --dry-run`、`.iss` 卸载保留数据目录、`.gitignore` 守护 |
+| `test_case_metadata.py` | 4 | `0009_case_metadata` 迁移升降级、首页案号/原被告/5 档办理状态读写与 CAS 冲突、筛选排序及归档只读保护 |
+| `test_dossier_export.py` | 7 | 法院标准双场景卷宗 ZIP 导出：A4 横竖混排与装订线、封面与目录自动带入 `0009` 案号原被告、加密/损坏 PDF 容错、DOCX/XLSX 提示页、电子立案分项裁切与已归档只读导出 |
 | `test_backup_consistency.py` | 23 | 一致性检查各故障类型、备份清单与哈希、备份期间源变化失败、`INCOMPLETE` 拒绝恢复、越界路径拒绝、空环境恢复往返、非空目标拒绝、维护标志阻断与解除、工作副本纳入备份 |
 | `test_web_cache.py` | 4 | index.html 与 SPA 路由 no-store、哈希产物 immutable 长缓存、API 不加静态缓存头（回归 2026-11-18 旧壳缓存缺陷） |
 | `test_progress.py` | 46 | 进度服务：默认片段实例化、规则注入扩展（新种类＋四层不改代码）、包含/标题/状态校验、CAS 冲突、跨案父节点与关联拒绝、移动成环与重排、set_active_stage 连带原阶段一条变更、Agent 待确认/确认/撤回（含已确认可撤回、后续修改拒绝）、accept_all 仅人工/空态拒绝/只确认已展示条目/expected_seq 冲突、request_key 幂等、片段插入（含 before_node_id 让位）与整体撤回、软删除恢复、关系与关联生命周期、审计闭集只存 ID、变化序号、同案并发串行、backfill 幂等＋旧阶段精确匹配激活；审查整改回归：撤回新建遇后续子节点拒绝、移动撤回还原同级顺序、移除关系/关联后重建再撤回冲突、普通编辑/新增联动单一进行中阶段、显式 null 清空备注日期、有效关系/关联部分唯一索引、CLI/MCP 建案 actor 来源；审查末节：accept_all 显式空集拒绝、省略 IDs 须 expected_seq、批量审计逐条可还原确认集合 |
@@ -67,7 +74,7 @@
 
 ## 前端测试
 
-`frontend` 使用 Vitest CLI、jsdom 和 Testing Library，截至 2026-11-23 共 **407 项**（57 个测试文件；除下方历史逐文件清单外，后续新增关系图/证据目录/诉请金额/图表程序化/跨平台快捷键 `src/ui/shortcuts.test.tsx`、首页归档切换及共享导航 `?view=` 同步等回归见 `CaseArchiveUiGuards.test.tsx`、`CasesPage.test.tsx`、`GraphCanvas.test.tsx` 与 `CHANGELOG.md`；本机历史报告归档于 `docs/reports/` 不随开源仓库分发）：
+`frontend` 使用 Vitest CLI、jsdom 和 Testing Library，截至 2026-11-24 共 **414 项**（58 个测试文件；除下方历史逐文件清单外，后续新增关系图/证据目录/诉请金额/图表程序化/跨平台快捷键 `src/ui/shortcuts.test.tsx`、多主题切换 `src/ui/theme.test.tsx`、首页元信息筛选与归档切换及共享导航 `?view=` 同步等回归见 `CaseArchiveUiGuards.test.tsx`、`CasesPage.test.tsx`、`GraphCanvas.test.tsx` 与 `CHANGELOG.md`；本机历史报告归档于 `docs/reports/` 不随开源仓库分发）：
 
 | 文件 | 条数 | 覆盖内容 |
 |---|---|---|

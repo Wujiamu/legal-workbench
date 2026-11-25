@@ -2,28 +2,63 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from typing import Iterable
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import case as sa_case, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from . import audit, models
 from .db import begin_write, update_with_revision
 from .errors import ErrorCode, WorkbenchError
-from .schemas import (ArchiveCaseInput, CaseOverview, CaseScheduleInput, CaseSummary,
-                      CreateCaseOutput, DashboardDeadlineItem, DashboardDeadlinesOutput,
-                      DashboardOutput, Deadline, ListCasesOutput)
+from .schemas import (ArchiveCaseInput, CaseMetadataInput, CaseOverview, CaseScheduleInput,
+                      CaseSummary, CreateCaseOutput, DashboardDeadlineItem,
+                      DashboardDeadlinesOutput, DashboardOutput, Deadline, ListCasesOutput)
+
+WORK_STATUS_SORT_ORDER = {
+    "need_materials": 1,
+    "need_sync": 2,
+    "normal": 3,
+    "waiting_external": 4,
+    "paused": 5,
+}
+DEADLINE_FILTERS = ("all", "overdue", "due_soon", "has_open")
+SORT_FIELDS = ("next_due", "created_at", "case_number", "work_status", "title")
+SORT_DIRS = ("asc", "desc")
+
+
+def _clean_optional(value: str | None) -> str | None:
+    stripped = (value or "").strip()
+    return stripped or None
+
+
+def _valid_work_status(value: str) -> str:
+    if value not in models.CASE_WORK_STATUSES:
+        raise WorkbenchError(ErrorCode.INVALID_INPUT, f"不支持的办理状态：{value}")
+    return value
 
 
 def create_case(session: Session, *, title: str, description: str | None = None,
+                case_number: str | None = None, plaintiff: str | None = None,
+                defendant: str | None = None, work_status: str = "normal",
                 actor: str = "human", entry: str = "local-web") -> CreateCaseOutput:
     title = title.strip()
     if not title:
         raise WorkbenchError(ErrorCode.INVALID_INPUT, "案件标题不能为空")
+    status = _valid_work_status(work_status)
     begin_write(session)
-    row = models.Case(id=uuid.uuid4(), title=title, description=description, revision=0)
+    row = models.Case(
+        id=uuid.uuid4(),
+        title=title,
+        description=description,
+        case_number=_clean_optional(case_number),
+        plaintiff=_clean_optional(plaintiff),
+        defendant=_clean_optional(defendant),
+        work_status=status,
+        revision=0,
+    )
     session.add(row)
     session.flush()
     audit.record(session, operation="case.create", target_type="case", target_id=row.id,
@@ -35,26 +70,183 @@ def create_case(session: Session, *, title: str, description: str | None = None,
     return CreateCaseOutput(case_id=row.id, revision=row.revision)
 
 
-def list_cases(session: Session, *, offset: int = 0, limit: int = 50,
-               archived: bool | None = None) -> ListCasesOutput:
-    """归档过滤：None=全部、False=仅办理中、True=仅已归档。"""
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _query_cases(
+    session: Session,
+    *,
+    archived: bool | None,
+    offset: int,
+    limit: int,
+    q: str | None = None,
+    work_status: str | None = None,
+    deadline_filter: str | None = None,
+    sort_by: str,
+    sort_dir: str = "asc",
+) -> tuple[list[models.Case], int]:
+    if isinstance(work_status, str) and not work_status.strip():
+        work_status = None
+    if isinstance(deadline_filter, str) and not deadline_filter.strip():
+        deadline_filter = None
+    if work_status is not None:
+        _valid_work_status(work_status)
+    if deadline_filter is not None and deadline_filter not in DEADLINE_FILTERS:
+        raise WorkbenchError(ErrorCode.INVALID_INPUT, f"不支持的期限筛选：{deadline_filter}")
+    if sort_by not in SORT_FIELDS:
+        raise WorkbenchError(ErrorCode.INVALID_INPUT, f"不支持的排序字段：{sort_by}")
+    if sort_dir not in SORT_DIRS:
+        raise WorkbenchError(ErrorCode.INVALID_INPUT, f"不支持的排序方向：{sort_dir}")
+
+    conditions = []
+    if archived is True:
+        conditions.append(models.Case.archived_at.is_not(None))
+    elif archived is False:
+        conditions.append(models.Case.archived_at.is_(None))
+
+    if work_status is not None:
+        conditions.append(models.Case.work_status == work_status)
+
+    keyword = (q or "").strip()
+    if keyword:
+        pattern = f"%{_escape_like(keyword)}%"
+        node_match = exists(
+            select(1).where(
+                models.ProgressNode.case_id == models.Case.id,
+                models.ProgressNode.removed_at.is_(None),
+                models.ProgressNode.state.in_(("in_progress", "pending")),
+                models.ProgressNode.title.ilike(pattern, escape="\\"),
+            )
+        )
+        conditions.append(or_(
+            models.Case.title.ilike(pattern, escape="\\"),
+            models.Case.case_number.ilike(pattern, escape="\\"),
+            models.Case.plaintiff.ilike(pattern, escape="\\"),
+            models.Case.defendant.ilike(pattern, escape="\\"),
+            models.Case.next_action.ilike(pattern, escape="\\"),
+            node_match,
+        ))
+
+    if deadline_filter and deadline_filter != "all":
+        today = shanghai_today()
+        dl = func.jsonb_array_elements(models.Case.deadlines).column_valued("dl")
+        open_cond = func.coalesce(dl.op("->>")("completed"), "false") != "true"
+        if deadline_filter == "overdue":
+            dl_match = exists(select(dl).where(
+                open_cond, dl.op("->>")("due") < today.isoformat(),
+            ).correlate(models.Case))
+        elif deadline_filter == "due_soon":
+            soon = (today + timedelta(days=7)).isoformat()
+            dl_match = exists(select(dl).where(
+                open_cond, dl.op("->>")("due") <= soon,
+            ).correlate(models.Case))
+        else:  # has_open
+            dl_match = exists(select(dl).where(
+                open_cond, dl.op("->>")("due").is_not(None),
+            ).correlate(models.Case))
+        conditions.append(dl_match)
+
     rows_query = select(models.Case)
     count_query = select(func.count()).select_from(models.Case)
-    if archived is True:
-        rows_query = rows_query.where(models.Case.archived_at.is_not(None))
-        count_query = count_query.where(models.Case.archived_at.is_not(None))
-    elif archived is False:
-        rows_query = rows_query.where(models.Case.archived_at.is_(None))
-        count_query = count_query.where(models.Case.archived_at.is_(None))
-    total = session.execute(count_query).scalar_one()
-    rows = session.execute(
-        rows_query.order_by(models.Case.created_at, models.Case.id)
-        .offset(offset).limit(limit)
-    ).scalars().all()
+    if conditions:
+        rows_query = rows_query.where(*conditions)
+        count_query = count_query.where(*conditions)
+
+    total = session.scalar(count_query) or 0
+
+    desc = sort_dir == "desc"
+    if sort_by == "next_due":
+        deadline = func.jsonb_array_elements(models.Case.deadlines).column_valued("deadline")
+        next_due = (
+            select(func.min(deadline.op("->>")("due")))
+            .where(func.coalesce(deadline.op("->>")("completed"), "false") != "true")
+            .correlate(models.Case)
+            .scalar_subquery()
+        )
+        primary = next_due.desc().nulls_last() if desc else next_due.asc().nulls_last()
+        order_clauses = [primary, models.Case.title.asc(), models.Case.id.asc()]
+    elif sort_by == "case_number":
+        primary = (
+            models.Case.case_number.desc().nulls_last()
+            if desc else models.Case.case_number.asc().nulls_last()
+        )
+        order_clauses = [primary, models.Case.title.asc(), models.Case.id.asc()]
+    elif sort_by == "work_status":
+        rank = sa_case(WORK_STATUS_SORT_ORDER, value=models.Case.work_status, else_=99)
+        primary = rank.desc() if desc else rank.asc()
+        order_clauses = [primary, models.Case.title.asc(), models.Case.id.asc()]
+    elif sort_by == "title":
+        primary = models.Case.title.desc() if desc else models.Case.title.asc()
+        order_clauses = [primary, models.Case.id.asc()]
+    else:  # created_at
+        primary = models.Case.created_at.desc() if desc else models.Case.created_at.asc()
+        order_clauses = [primary, models.Case.id.asc()]
+
+    rows = session.scalars(rows_query.order_by(*order_clauses).offset(offset).limit(limit)).all()
+    return list(rows), total
+
+
+def list_cases(session: Session, *, offset: int = 0, limit: int = 50,
+               archived: bool | None = None, q: str | None = None,
+               work_status: str | None = None, deadline_filter: str | None = None,
+               sort_by: str = "created_at", sort_dir: str = "asc") -> ListCasesOutput:
+    """归档过滤：None=全部、False=仅办理中、True=仅已归档；支持关键词/状态筛选与排序。"""
+    rows, total = _query_cases(
+        session, archived=archived, offset=offset, limit=limit,
+        q=q, work_status=work_status, deadline_filter=deadline_filter,
+        sort_by=sort_by, sort_dir=sort_dir,
+    )
     return ListCasesOutput(
-        items=[CaseSummary(case_id=row.id, title=row.title, description=row.description,
-                           revision=row.revision, created_at=row.created_at,
-                           archived_at=row.archived_at) for row in rows],
+        items=[CaseSummary(
+            case_id=row.id,
+            title=row.title,
+            description=row.description,
+            case_number=row.case_number,
+            plaintiff=row.plaintiff,
+            defendant=row.defendant,
+            work_status=row.work_status,
+            revision=row.revision,
+            created_at=row.created_at,
+            archived_at=row.archived_at,
+        ) for row in rows],
+        offset=offset, limit=limit, total=total,
+    )
+
+
+def list_cases_by_ids(session: Session, case_ids: Iterable[uuid.UUID], *, offset: int = 0,
+                      limit: int = 50) -> ListCasesOutput:
+    """List only the named cases (the Agent allowlist path).
+
+    Never runs the unfiltered query: an Agent in ``allowlist`` mode must not be
+    able to learn how many other cases exist, so both the page and ``total`` are
+    computed inside the authorised id set.  Ids that do not exist simply drop
+    out; the caller's ordering is not preserved because a stable
+    ``created_at, id`` order is what makes paging correct.
+    """
+    ids = list(dict.fromkeys(uuid.UUID(str(item)) for item in case_ids))
+    if not ids:
+        return ListCasesOutput(items=[], offset=offset, limit=limit, total=0)
+    conditions = (models.Case.id.in_(ids),)
+    total = session.scalar(
+        select(func.count()).select_from(models.Case).where(*conditions)) or 0
+    rows = session.scalars(
+        select(models.Case).where(*conditions)
+        .order_by(models.Case.created_at.asc(), models.Case.id.asc())
+        .offset(offset).limit(limit)).all()
+    return ListCasesOutput(
+        items=[CaseSummary(
+            case_id=row.id,
+            title=row.title,
+            description=row.description,
+            case_number=row.case_number,
+            plaintiff=row.plaintiff,
+            defendant=row.defendant,
+            work_status=row.work_status,
+            revision=row.revision,
+            created_at=row.created_at,
+            archived_at=row.archived_at,
+        ) for row in rows],
         offset=offset, limit=limit, total=total,
     )
 
@@ -101,6 +293,8 @@ def _progress_summary(session: Session, case_id: uuid.UUID) -> tuple[list[str], 
 def _overview(session: Session, row: models.Case) -> CaseOverview:
     active_stages, pending_work = _progress_summary(session, row.id)
     return CaseOverview(case_id=row.id, title=row.title, description=row.description,
+                        case_number=row.case_number, plaintiff=row.plaintiff,
+                        defendant=row.defendant, work_status=row.work_status,
                         revision=row.revision, created_at=row.created_at, stage=row.stage,
                         next_action=row.next_action, deadlines=row.deadlines,
                         active_stage=active_stages[0] if active_stages else None,
@@ -115,17 +309,15 @@ def get_case(session: Session, case_id: uuid.UUID) -> CaseOverview:
     return _overview(session, row)
 
 
-def dashboard(session: Session, *, offset: int, limit: int) -> DashboardOutput:
-    deadline = func.jsonb_array_elements(models.Case.deadlines).column_valued("deadline")
-    next_due = (select(func.min(deadline.op("->>")("due")))
-                .where(deadline.op("->>")("completed") != "true").correlate(models.Case)
-                .scalar_subquery())
-    rows = session.scalars(select(models.Case)
-                           .where(models.Case.archived_at.is_(None))
-                           .order_by(next_due.asc().nulls_last(), models.Case.title, models.Case.id)
-                           .offset(offset).limit(limit)).all()
-    total = session.scalar(select(func.count()).select_from(models.Case)
-                           .where(models.Case.archived_at.is_(None)))
+def dashboard(session: Session, *, offset: int, limit: int,
+              q: str | None = None, work_status: str | None = None,
+              deadline_filter: str | None = None, sort_by: str = "next_due",
+              sort_dir: str = "asc") -> DashboardOutput:
+    rows, total = _query_cases(
+        session, archived=False, offset=offset, limit=limit,
+        q=q, work_status=work_status, deadline_filter=deadline_filter,
+        sort_by=sort_by, sort_dir=sort_dir,
+    )
     return DashboardOutput(items=[_overview(session, row) for row in rows], total=total,
                            offset=offset, limit=limit)
 
@@ -172,6 +364,24 @@ def update_schedule(session: Session, payload: CaseScheduleInput) -> CaseOvervie
         deadlines=[item.model_dump(mode="json") for item in payload.deadlines])
     if not changed:
         raise WorkbenchError(ErrorCode.CONFLICT, "案件办理信息已变化")
+    result = get_case(session, payload.case_id)
+    session.commit()
+    return result
+
+
+def update_metadata(session: Session, payload: CaseMetadataInput) -> CaseOverview:
+    """更新案件基础信息（案号、原告、被告、办理状态）；已归档案件只读拒绝。"""
+    lock_case_writable(session, payload.case_id)
+    status = _valid_work_status(payload.work_status)
+    changed = update_with_revision(
+        session, models.Case, payload.case_id, payload.expected_revision,
+        case_number=_clean_optional(payload.case_number),
+        plaintiff=_clean_optional(payload.plaintiff),
+        defendant=_clean_optional(payload.defendant),
+        work_status=status,
+    )
+    if not changed:
+        raise WorkbenchError(ErrorCode.CONFLICT, "案件信息已变化，请刷新后重试")
     result = get_case(session, payload.case_id)
     session.commit()
     return result

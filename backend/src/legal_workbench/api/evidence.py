@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from .. import evidence_catalog
+from .. import dossier_export, evidence_catalog
 from ..errors import ErrorCode, WorkbenchError
 from ..schemas import (
     AddEvidenceBindingInput, AddEvidenceGroupInput, AddEvidenceItemInput,
@@ -25,7 +25,9 @@ from ..schemas import (
     MoveEvidenceItemInput, RemoveEvidenceBindingInput, ReorderEvidenceGroupsInput,
     UpdateEvidenceGroupInput, UpdateEvidenceItemInput,
 )
-from .deps import Guarded, get_db
+from ..storage import Storage
+from .deps import Guarded, get_db, get_storage
+from .files import _content_disposition
 from .ids import uuid_of
 
 router = APIRouter(prefix="/api/v1/cases/{case_id}", tags=["evidence"],
@@ -64,6 +66,24 @@ def export_catalog(case_id: str, session: Session = Depends(get_db)) -> Response
         "Content-Disposition": f"attachment; filename=\"catalog.csv\"; filename*=UTF-8''{name}",
         "X-Content-Type-Options": "nosniff",
     })
+
+
+@router.get("/evidence-catalog/bundle")
+def export_evidence_bundle(
+    case_id: str,
+    session: Session = Depends(get_db),
+    storage: Storage = Depends(get_storage),
+) -> Response:
+    """自动装卷：导出合订卷宗 PDF、可编辑 Word 目录、CSV 与按编号重命名的分项文件 ZIP。"""
+    result = dossier_export.export_evidence_bundle(session, storage, uuid_of(case_id, "case_id"))
+    return Response(
+        result.data,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": _content_disposition("attachment", result.filename),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/evidence-catalog/import/preview", response_model=ImportPreviewOutput)

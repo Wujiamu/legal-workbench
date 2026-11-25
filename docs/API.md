@@ -1,6 +1,6 @@
-# V0.1 接口契约（待主代理审核）
+# 接口契约
 
-本文件及 `openapi.json` 规定协议，不表示 HTTP 服务或业务已实现。Pydantic 定义为唯一类型来源：在项目根目录执行 `backend/.venv/bin/python scripts/generate_protocol.py`，再执行 `frontend/node_modules/.bin/openapi-typescript docs/openapi.json -o frontend/src/api/types.ts`。修改模型后两者均须重新生成，勿手工修改生成物。OpenAPI 包含路径、参数、输入输出与统一错误；实现阶段须保留该契约。
+适用基线：`v0.1.0` + `0009_case_metadata`（已实现并运行于本机 HTTP/CLI/MCP 入口）。Pydantic 定义为唯一类型来源：在项目根目录执行 `backend/.venv/bin/python scripts/generate_protocol.py`，再执行 `frontend/node_modules/.bin/openapi-typescript docs/openapi.json -o frontend/src/api/types.ts`。修改模型后两者均须重新生成，勿手工修改生成物。OpenAPI 包含路径、参数、输入输出与统一错误。
 
 前端消费方式的约束：`frontend/src/api/endpoints.ts` 只能写 `type X = Schemas['X']` 别名或直接引用 `Schemas['…']`，不得手写字段清单，也不得用匿名对象类型描述响应。手写一套类型等于允许后端加字段而前端静默漏读。
 
@@ -107,6 +107,7 @@ Dashboard 按最近一项未完成期限的到期日排序，无未完成期限�
 |---|---|
 | GET `/cases/{case_id}/graphs` | 案件关系图工作区、快照、同意记录及现行目录编号 |
 | GET `/cases/{case_id}/evidence-catalog` | 分组、条目、材料绑定、编号及证据域待确认提案 |
+| GET `/cases/{case_id}/evidence-catalog/bundle` | 自动装卷：导出按中国法院装订/编页规范生成的 ZIP 卷宗包（含合订 PDF、可编辑 DOCX/CSV 目录及按编号重命名分项材料） |
 | GET `/cases/{case_id}/claims` | 诉请分组、整数分明细、各币种总额及待确认提案 |
 | GET `/cases/{case_id}/changes/seq` | `progress`、`graph`、`evidence`、`claims` 的独立变化序号 |
 
@@ -118,6 +119,8 @@ Dashboard 按最近一项未完成期限的到期日排序，无未完成期限�
 
 | 能力 | 方法及路径（`/api/v1` 下） |
 |---|---|
+| dashboard / list_cases | GET `/dashboard` 与 GET `/cases` 支持可选 `q`（案名/案号/原被告/下一步/未完成节点）、`work_status`、`deadline_filter`、`sort_by`、`sort_dir` 参数 |
+| update_case_metadata | PATCH `/cases/{case_id}/metadata`（按 `revision` CAS 更新案号、原告、被告、办理状态；归档案件只读拒绝） |
 | chart_preflight | POST `/cases/{case_id}/charts/preflight`（`working`/`client`/`court` 硬门禁预检与豁免检查） |
 | chart_citation_table | POST `/cases/{case_id}/charts/citation-table`（返回 JSON / Markdown / CSV《图示引用索引附表》） |
 | chart_audit_bundle | GET `/cases/{case_id}/charts/audit-bundle`（只读复核审计包 JSON） |

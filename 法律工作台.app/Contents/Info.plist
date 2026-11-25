@@ -10,6 +10,8 @@
     <string>法律工作台</string>
     <key>CFBundleExecutable</key>
     <string>launch-workbench</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>

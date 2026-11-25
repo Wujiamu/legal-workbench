@@ -11,7 +11,15 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend" / "src"))
 
-from legal_workbench.config import _is_windows, load_settings, pg_env, resolve_pg_bin  # noqa: E402
+from legal_workbench import runtime_paths  # noqa: E402
+from legal_workbench.config import (  # noqa: E402
+    _is_windows,
+    load_settings,
+    pg_env,
+    resolve_home_dir,
+    resolve_pg_bin,
+    write_instance_pointer,
+)
 
 DATA = ROOT / "var" / "postgres"
 RUNTIME = ROOT / "var" / "runtime"
@@ -44,6 +52,12 @@ def _pg_tool(pg_bin: Path, name: str) -> str:
         return found
     suffix = ".exe" if _is_windows() else ""
     return str(pg_bin / f"{name}{suffix}")
+
+
+def _frontend_dist() -> Path:
+    """Built frontend: bundle copy in a packaged tree, checkout copy otherwise."""
+    return runtime_paths.resolve_frontend_dist(
+        root=ROOT, bundle_root=runtime_paths.resolve_bundle_root(root=ROOT))
 
 
 def _venv_python() -> Path:
@@ -194,6 +208,8 @@ def start():
     settings = load_settings()
     if settings.host != "127.0.0.1":
         raise RuntimeError("LWB_HOST must be 127.0.0.1")
+    if not (_frontend_dist() / "index.html").is_file():
+        raise RuntimeError("网页文件尚未构建，请按 README 完成安装。")
     start_db()
     migrate()
     os.chdir(ROOT / "backend")
@@ -252,12 +268,102 @@ def start():
             signal.signal(signal.SIGBREAK, previous_break)
 
 
+def register_instance() -> int:
+    """Record this checkout in the machine-wide instance pointer file.
+
+    Portable agent plugins (Codex / DSH / any MCP client) read that pointer to
+    find the workbench without a hard-coded path.  Only paths and a timestamp
+    are written — never database URLs, passwords or case data.
+    """
+    # An explicit LWB_HOME may point at a data directory away from the checkout;
+    # otherwise the pointer names this checkout, which is what agent plugins need
+    # in order to import the package.
+    home = resolve_home_dir() if os.environ.get("LWB_HOME", "").strip() else ROOT
+    try:
+        target = write_instance_pointer(home, ROOT)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    print(f"已登记素章（PlainFolio）工作台实例：{home}")
+    print(f"实例指针文件：{target}")
+    print("指针仅记录工作台路径与时间戳，不含数据库口令或任何凭据。")
+    print("Codex / DSH 等 Agent 客户端可据此自动发现本机工作台；也可用 LWB_HOME 直接指定目录。")
+    return 0
+
+
 def _exec_or_run(cmd: list[str]) -> int:
     env = pg_env()
     if _is_windows():
         return subprocess.run(cmd, env=env, **_win_subprocess_kwargs()).returncode
     os.execvpe(cmd[0], cmd, env)
     return 0
+
+
+# --- 承办人本机专属的 Agent 授权管理 -------------------------------------
+# 实现放在 backend/src/legal_workbench/agent_access_cli.py：打包态没有 scripts/
+# 目录，`--run-cli agent-grant …` 必须能走同一条路径。这里只做「找到有依赖的
+# 解释器」和「转发」，避免两份实现漂移。
+# 这些命令只在本机终端由本人执行；MCP 侧没有、也不会有对应工具。
+
+AGENT_COMMANDS = ("agent-status", "agent-grant", "agent-revoke", "agent-lock",
+                  "agent-allow-all")
+_AGENT_USAGE = (
+    "用法:\n"
+    "  scripts/lwb agent-status                     查看当前策略与已授权案件\n"
+    "  scripts/lwb agent-grant <case_id>            临时放行单个案件（切到 allowlist）\n"
+    "  scripts/lwb agent-revoke <case_id>           收回单个案件（白名单空则回到 deny_all）\n"
+    "  scripts/lwb agent-lock                       立即全局锁死并清空白名单\n"
+    "  scripts/lwb agent-allow-all --confirm        对所有案件开放（风险，仅限本地离线模型）"
+)
+
+
+def _delegate_agent_command(command: str, argv: list[str]) -> int | None:
+    """Run the command under the workbench venv when this interpreter lacks deps.
+
+    ``scripts/lwb`` is executed directly (``#!/usr/bin/env python3``) for
+    ``init``/``start``, which only need the standard library and shell out to
+    ``backend/.venv`` for real work.  The agent commands import the policy module
+    (pydantic), so they re-enter through the venv interpreter instead of failing
+    with an ImportError the 承办人 cannot act on.  ``LWB_AGENT_REEXEC`` stops a
+    second hop if the venv itself is broken.
+    """
+    if os.environ.get("LWB_AGENT_REEXEC") == "1":
+        return None
+    venv_py = _venv_python()
+    if not venv_py.is_file():
+        return None
+    # Compare the *virtualenv* prefix, not the interpreter path: on macOS the venv
+    # python is a symlink to the same framework binary as the system python3, so
+    # resolved paths are equal even though only one of them has the dependencies.
+    if Path(sys.prefix).resolve() == (ROOT / "backend" / ".venv").resolve():
+        return None
+    env = {**os.environ, "LWB_AGENT_REEXEC": "1"}
+    return subprocess.run(
+        [str(venv_py), str(Path(__file__).resolve()), command, *argv],
+        env=env, **_win_subprocess_kwargs(),
+    ).returncode
+
+
+def run_agent_command(command: str, argv: list[str]) -> int:
+    try:
+        from legal_workbench import agent_access_cli
+    except ImportError:
+        delegated = _delegate_agent_command(command, argv)
+        if delegated is not None:
+            return delegated
+        print("无法加载工作台后端依赖（backend/.venv）；请先按 README 完成安装。",
+              file=sys.stderr)
+        return 1
+    return agent_access_cli.run(command, argv)
+
+
+def _usage() -> str:
+    return (
+        "用法: scripts/lwb {init|migrate|start|start-db|stop|worker|doctor|register-instance}\n"
+        "      scripts/lwb {agent-status|agent-grant <case_id>|agent-revoke <case_id>|"
+        "agent-lock|agent-allow-all --confirm}\n"
+        "\n"
+        "Agent 授权命令只在本机由承办人执行；默认锁死，未授权时 Agent 无法访问任何案件。"
+    )
 
 
 def _format_failure(exc: BaseException) -> str:
@@ -270,11 +376,20 @@ def _format_failure(exc: BaseException) -> str:
 
 def main():
     _ensure_utf8_stdio()
-    if len(sys.argv) != 2 or sys.argv[1] not in ("init", "start", "start-db", "stop", "doctor", "migrate", "worker"):
-        print("用法: scripts/lwb {init|migrate|start|start-db|stop|worker|doctor}", file=sys.stderr)
+    commands = ("init", "start", "start-db", "stop", "doctor", "migrate", "worker",
+                "register-instance")
+    argv = sys.argv[1:]
+    if not argv:
+        print(_usage(), file=sys.stderr)
+        return 2
+    command, rest = argv[0], argv[1:]
+    if command in AGENT_COMMANDS:
+        # 授权命令不改工作目录、不碰数据库：它们只读写本机策略文件。
+        return run_agent_command(command, rest)
+    if command not in commands or rest:
+        print(_usage(), file=sys.stderr)
         return 2
     os.chdir(ROOT)
-    command = sys.argv[1]
     if command == "init":
         return initialize() or 0
     elif command == "migrate":
@@ -284,6 +399,8 @@ def main():
         return start()
     elif command == "start-db":
         start_db()
+    elif command == "register-instance":
+        return register_instance()
     elif command == "worker":
         os.chdir(ROOT / "backend")
         return _exec_or_run(_backend_cmd(

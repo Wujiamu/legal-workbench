@@ -68,6 +68,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{case_id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["update_case_metadata"];
+        trace?: never;
+    };
     "/api/v1/cases/{case_id}/schedule": {
         parameters: {
             query?: never;
@@ -1892,6 +1908,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{case_id}/evidence-catalog/bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export_evidence_bundle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{case_id}/evidence-catalog/import/preview": {
         parameters: {
             query?: never;
@@ -2880,6 +2912,37 @@ export interface components {
              */
             case_id: string;
         };
+        /** CaseMetadataInput */
+        CaseMetadataInput: {
+            /**
+             * Case Id
+             * Format: uuid
+             */
+            case_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Case Number
+             * @default null
+             */
+            case_number: string | null;
+            /**
+             * Plaintiff
+             * @default null
+             */
+            plaintiff: string | null;
+            /**
+             * Defendant
+             * @default null
+             */
+            defendant: string | null;
+            /**
+             * Work Status
+             * @default normal
+             * @enum {string}
+             */
+            work_status: "normal" | "need_materials" | "need_sync" | "waiting_external" | "paused";
+        };
         /** CaseOverview */
         CaseOverview: {
             /**
@@ -2891,6 +2954,27 @@ export interface components {
             title: string;
             /** Description */
             description: string | null;
+            /**
+             * Case Number
+             * @default null
+             */
+            case_number: string | null;
+            /**
+             * Plaintiff
+             * @default null
+             */
+            plaintiff: string | null;
+            /**
+             * Defendant
+             * @default null
+             */
+            defendant: string | null;
+            /**
+             * Work Status
+             * @default normal
+             * @enum {string}
+             */
+            work_status: "normal" | "need_materials" | "need_sync" | "waiting_external" | "paused";
             /** Revision */
             revision: number;
             /**
@@ -2952,6 +3036,27 @@ export interface components {
             title: string;
             /** Description */
             description: string | null;
+            /**
+             * Case Number
+             * @default null
+             */
+            case_number: string | null;
+            /**
+             * Plaintiff
+             * @default null
+             */
+            plaintiff: string | null;
+            /**
+             * Defendant
+             * @default null
+             */
+            defendant: string | null;
+            /**
+             * Work Status
+             * @default normal
+             * @enum {string}
+             */
+            work_status: "normal" | "need_materials" | "need_sync" | "waiting_external" | "paused";
             /** Revision */
             revision: number;
             /**
@@ -4092,6 +4197,27 @@ export interface components {
              * @default null
              */
             description: string | null;
+            /**
+             * Case Number
+             * @default null
+             */
+            case_number: string | null;
+            /**
+             * Plaintiff
+             * @default null
+             */
+            plaintiff: string | null;
+            /**
+             * Defendant
+             * @default null
+             */
+            defendant: string | null;
+            /**
+             * Work Status
+             * @default normal
+             * @enum {string}
+             */
+            work_status: "normal" | "need_materials" | "need_sync" | "waiting_external" | "paused";
         };
         /** CreateCaseOutput */
         CreateCaseOutput: {
@@ -4234,6 +4360,44 @@ export interface components {
             as_of: string;
             /** Case Total */
             case_total: number;
+        };
+        /** DashboardInput */
+        DashboardInput: {
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Limit
+             * @default 50
+             */
+            limit: number;
+            /**
+             * Q
+             * @default null
+             */
+            q: string | null;
+            /**
+             * Work Status
+             * @default null
+             */
+            work_status: ("normal" | "need_materials" | "need_sync" | "waiting_external" | "paused") | null;
+            /**
+             * Deadline Filter
+             * @default null
+             */
+            deadline_filter: ("all" | "overdue" | "due_soon" | "has_open") | null;
+            /**
+             * Sort By
+             * @default null
+             */
+            sort_by: ("next_due" | "created_at" | "case_number" | "work_status" | "title") | null;
+            /**
+             * Sort Dir
+             * @default null
+             */
+            sort_dir: ("asc" | "desc") | null;
         };
         /** DashboardOutput */
         "DashboardOutput-Input": {
@@ -5894,6 +6058,36 @@ export interface components {
              * @default 50
              */
             limit: number;
+            /**
+             * Q
+             * @default null
+             */
+            q: string | null;
+            /**
+             * Work Status
+             * @default null
+             */
+            work_status: ("normal" | "need_materials" | "need_sync" | "waiting_external" | "paused") | null;
+            /**
+             * Deadline Filter
+             * @default null
+             */
+            deadline_filter: ("all" | "overdue" | "due_soon" | "has_open") | null;
+            /**
+             * Sort By
+             * @default null
+             */
+            sort_by: ("next_due" | "created_at" | "case_number" | "work_status" | "title") | null;
+            /**
+             * Sort Dir
+             * @default null
+             */
+            sort_dir: ("asc" | "desc") | null;
+            /**
+             * Archived
+             * @default null
+             */
+            archived: boolean | null;
         };
         /** ListCasesOutput */
         ListCasesOutput: {
@@ -8117,6 +8311,12 @@ export interface operations {
             query?: {
                 offset?: number;
                 limit?: number;
+                q?: string | null;
+                work_status?: ("normal" | "need_materials" | "need_sync" | "waiting_external" | "paused") | null;
+                deadline_filter?: ("all" | "overdue" | "due_soon" | "has_open") | null;
+                sort_by?: ("next_due" | "created_at" | "case_number" | "work_status" | "title") | null;
+                sort_dir?: ("asc" | "desc") | null;
+                archived?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -8292,6 +8492,11 @@ export interface operations {
             query?: {
                 offset?: number;
                 limit?: number;
+                q?: string | null;
+                work_status?: ("normal" | "need_materials" | "need_sync" | "waiting_external" | "paused") | null;
+                deadline_filter?: ("all" | "overdue" | "due_soon" | "has_open") | null;
+                sort_by?: ("next_due" | "created_at" | "case_number" | "work_status" | "title") | null;
+                sort_dir?: ("asc" | "desc") | null;
             };
             header?: never;
             path?: never;
@@ -8466,6 +8671,97 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseOverview"];
+                };
+            };
+            /** @description Structured error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_case_metadata: {
+        parameters: {
+            query?: never;
+            header: {
+                Origin: string;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseMetadataInput"];
+            };
+        };
         responses: {
             /** @description Success */
             200: {
@@ -18956,6 +19252,91 @@ export interface operations {
                 };
                 content: {
                     "text/csv": string;
+                };
+            };
+            /** @description Structured error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Structured error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_evidence_bundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
                 };
             };
             /** @description Structured error */

@@ -84,7 +84,7 @@ export function buildGraphModel(snapshot: ProgressSnapshot, rules: ProgressRules
       target,
       type: 'smoothstep',
       label: relationLabel(rules, relation.type),
-      style: { strokeDasharray: '6 4', stroke: '#8a5a00' },
+      style: { strokeDasharray: '6 4', stroke: 'var(--warning)' },
       data: { kind: 'relation' },
     });
   }

@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router';
 import { describeError } from '../api/client';
 import { casesApi, materialsApi, searchApi } from '../api/endpoints';
 import type { CaseOverview, CorpusCoverageMatrixOut, Coverage, MaterialSummary } from '../api/endpoints';
+import { BrandMark, ThemeSwitcher } from '../components/BrandMark';
 import { CaseNavBar, isWorkspaceTab } from '../components/CaseNavBar';
 import type { WorkspaceTab } from '../components/CaseNavBar';
 import { CaseOverviewPanel } from '../components/CaseOverview';
@@ -190,8 +191,10 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
     <div style={{ minHeight: '100vh', background: palette.background, fontFamily: fontStack,
                   color: palette.text, display: 'flex', flexDirection: 'column' }}>
       <header className="app-bar"><div className="app-bar-inner">
+        <BrandMark size={24} />
         <Link to="/" className="back-link">← 案件工作表</Link>
         <h1 title={overview?.title}>{overview?.title ?? '案件工作区'}</h1>
+        <ThemeSwitcher />
       </div></header>
       <CaseNavBar
         caseId={caseId}

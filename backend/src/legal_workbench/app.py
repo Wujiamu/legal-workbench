@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,7 +16,7 @@ from .api import chart_export as chart_export_api
 from .api import claims as claims_api
 from .api import source_notes as annotation_api
 from .api.deps import guard, request_id
-from .config import load_settings
+from .config import load_settings, resolve_frontend_dist
 from .errors import ErrorCode, WorkbenchError
 from .logging_config import configure_logging
 
@@ -74,7 +73,7 @@ async def handle_unexpected_error(request: Request, exc: Exception) -> JSONRespo
                         content=error.to_response(request_id(request)).model_dump(mode="json"))
 
 
-dist = (Path(__file__).resolve().parents[3] / "frontend" / "dist").resolve()
+dist = resolve_frontend_dist().resolve()
 if dist.is_dir():
     # 带内容哈希的构建产物可长期缓存；index.html 绝不缓存，
     # 否则浏览器启发式新鲜度会让用户停留在旧壳上（看不到新构建）。

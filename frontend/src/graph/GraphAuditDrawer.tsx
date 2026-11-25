@@ -316,7 +316,7 @@ function GraphAuditDrawerInner({
         .graph-audit-sample {
           border: 1px solid var(--line);
           border-radius: 8px;
-          background: #fbfcfa;
+          background: var(--surface-canvas);
           padding: 8px 10px;
           font-size: 12.5px;
           display: grid;

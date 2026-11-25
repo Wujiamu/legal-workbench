@@ -13,6 +13,7 @@ import { Link, useParams } from 'react-router';
 import { describeError } from '../api/client';
 import { casesApi, materialsApi, progressApi } from '../api/endpoints';
 import type { ProgressSnapshot as ApiSnapshot } from '../api/endpoints';
+import { AppBrand, ThemeSwitcher } from '../components/BrandMark';
 import { CaseNavBar } from '../components/CaseNavBar';
 import { ChangeReviewPanel } from './ChangeReviewPanel';
 import { CaseTimePanel } from './CaseTimePanel';
@@ -283,9 +284,10 @@ function CaseProgress({ caseId }: { caseId: string }) {
   return (
     <div className="progress-prototype">
       <header className="app-bar"><div className="app-bar-inner">
-        <span className="app-brand">法律工作台</span>
+        <AppBrand />
         <span className="app-section">办案进度 · {caseTitle}</span>
         <Link to="/">← 案件工作表</Link>
+        <ThemeSwitcher />
       </div></header>
       <CaseNavBar caseId={caseId} active="progress" />
       <main className="progress-main">

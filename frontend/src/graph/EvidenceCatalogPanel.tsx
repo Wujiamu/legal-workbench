@@ -3,7 +3,7 @@
  * 分组/条目按真实 DOM 顺序渲染，调序用键盘可用的「上移/下移」按钮，不用拖拽；
  * 编号随调序即时重算并驱动画布出处标签；外部导入的条目与绑定在人工确认前不参与编号。
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type {
   CommandResult, EvidenceGroup, EvidenceItem, GraphCommandRunner, GraphSnapshot,
@@ -31,7 +31,7 @@ function reviewBadge(item: EvidenceItem): { text: string; tone: string } {
 }
 
 export function EvidenceCatalogPanel({
-  ws, readOnly, run, runAgent, importSlot, exportHref,
+  ws, readOnly, run, runAgent, importSlot, exportHref, bundleHref,
 }: {
   ws: GraphSnapshot;
   readOnly: boolean;
@@ -41,6 +41,8 @@ export function EvidenceCatalogPanel({
   importSlot?: ReactNode;
   /** 真实 CSV 导出地址；缺失时隐藏（原型不导出）。 */
   exportHref?: string;
+  /** 真实案件自动装卷（ZIP）下载地址；缺失时隐藏。 */
+  bundleHref?: string;
 }) {
   const groups = groupsOf(ws);
   const [groupForm, setGroupForm] = useState<{ id?: string; title: string; purpose: string } | null>(null);
@@ -54,6 +56,12 @@ export function EvidenceCatalogPanel({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [bundling, setBundling] = useState(false);
+  const bundleAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => {
+    bundleAbortRef.current?.abort();
+  }, []);
 
   const pendingChanges = ws.evidence.pending_changes
     ?? ws.pending_changes.filter((change) => change.domain === 'evidence');
@@ -154,6 +162,65 @@ export function EvidenceCatalogPanel({
     if (result.ok) setBindingForm(null);
   }
 
+  async function downloadBundle() {
+    if (!bundleHref || bundling) return;
+    bundleAbortRef.current?.abort();
+    const controller = new AbortController();
+    bundleAbortRef.current = controller;
+    setBundling(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(bundleHref, {
+        headers: { Accept: 'application/zip, application/json' },
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        let message = '装卷导出失败，请稍后重试';
+        try {
+          const body = (await response.json()) as { message?: string };
+          if (body?.message) message = body.message;
+        } catch {
+          // ignore non-JSON error body
+        }
+        setError(message);
+        return;
+      }
+      const disposition = response.headers.get('Content-Disposition') ?? '';
+      const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+      const plainMatch = /filename="([^"]+)"/i.exec(disposition);
+      let filename = '证据卷宗.zip';
+      if (utf8Match?.[1]) {
+        try {
+          filename = decodeURIComponent(utf8Match[1]);
+        } catch {
+          filename = utf8Match[1];
+        }
+      } else if (plainMatch?.[1]) {
+        filename = plainMatch[1];
+      }
+      const blob = await response.blob();
+      if (controller.signal.aborted) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      setNotice('已生成并开始下载证据卷宗包（含合订 PDF、Word 目录及分项原件）');
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') return;
+      setError('无法连接本地服务，装卷导出失败');
+    } finally {
+      if (bundleAbortRef.current === controller) {
+        bundleAbortRef.current = null;
+        setBundling(false);
+      }
+    }
+  }
+
   return (
     <section className="graph-evidence" aria-label="证据目录">
       <header className="graph-evidence-head">
@@ -168,6 +235,12 @@ export function EvidenceCatalogPanel({
             onClick={() => setGroupForm({ title: '', purpose: '' })}>＋ 新建分组</button>
           {exportHref ? (
             <a className="graph-ev-export" href={exportHref} download>下载 CSV 目录</a>
+          ) : null}
+          {bundleHref ? (
+            <button type="button" className="graph-ev-bundle" disabled={bundling}
+              onClick={() => { void downloadBundle(); }}>
+              {bundling ? '装卷中…' : '一键装卷（ZIP）'}
+            </button>
           ) : null}
           {importSlot ? null : (
             <button type="button" disabled={readOnly || busy}

@@ -1,0 +1,18 @@
+{
+  "name": "plainfolio-local",
+  "interface": {
+    "displayName": "素章 · PlainFolio 本地插件市场"
+  },
+  "plugins": [
+    {
+      "name": "plainfolio",
+      "version": "0.1.0",
+      "description": "素章（PlainFolio）本地离线案件工作台的 MCP 服务与办案 Skills：查询案件、材料、索引与出处，保存带引用的分析，导出图表复核审计包；写入一律为待确认提案。",
+      "category": "Legal",
+      "source": {
+        "source": "local",
+        "path": "./plugins/plainfolio"
+      }
+    }
+  ]
+}

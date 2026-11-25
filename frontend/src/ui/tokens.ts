@@ -1,23 +1,24 @@
 /**
  * Design tokens and layout primitives.
  *
- * Neutral light palette, system Chinese font stack, and status that is always
+ * Theme-reactive archival light palettes (driven by CSS custom properties on
+ * :root[data-theme]), system Chinese font stack, and status that is always
  * expressed with text as well as colour so it survives colour-blind viewing and
  * greyscale printing.
  */
 export const palette = {
   background: 'var(--page-background)',
-  surface: '#ffffff',
-  border: '#d9d7d2',
-  borderStrong: '#b9b6ae',
+  surface: 'var(--surface)',
+  border: 'var(--line)',
+  borderStrong: 'var(--border-strong)',
   text: 'var(--page-text)',
   textMuted: 'var(--field-muted)',
-  accent: '#2f5d50',
-  accentSoft: '#e8efec',
-  warning: '#8a5a00',
-  warningSoft: '#fdf3df',
-  danger: '#8c2f2f',
-  dangerSoft: '#fbeaea',
+  accent: 'var(--accent)',
+  accentSoft: 'var(--accent-soft)',
+  warning: 'var(--warning)',
+  warningSoft: 'var(--warning-soft)',
+  danger: 'var(--danger)',
+  dangerSoft: 'var(--danger-soft)',
 } as const;
 
 export const fontStack = 'var(--font-body)';

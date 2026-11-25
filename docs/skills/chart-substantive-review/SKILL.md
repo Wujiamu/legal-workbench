@@ -7,6 +7,16 @@ description: 依据本地法律工作台的图表审计包逐项核对对外关�
 
 本技能消费本地法律工作台 `export-chart-audit-bundle` 输出的只读审计包（JSON），承担程序硬门禁之外的法律实质与策略核验。复核全程保持只读，不替承办人改图、确认提案、豁免门禁或发送审计包。
 
+## 授权前置与硬围栏纪律（必须先执行）
+
+1. **禁止默认连接、探测或列举工作台**。即使对话里提到案卷，在用户明确授权前也不得调用 `list_cases`、`list-cases`、`search_case` 或任何带 `case_id` 的工具与命令。工作台默认 `deny_all`（全局锁死），未获授权时除 `list_cases(limit=0)` 连通探活外一律返回 `forbidden`。
+2. **先向用户申请明确授权**，一次问清三件事：
+   - 本次允许访问的**具体目标案件**（`case_id` 或案件名称）；
+   - 当前所连接的对话模型**是否合规**接触该案材料——涉密、涉个人隐私或当事人禁止上云的案卷，**严禁**接入云端模型，只能用本机离线模型；
+   - 请用户**本人在本机终端**执行 `scripts/lwb agent-grant <case_id>`（Windows 为 `scripts\lwb.cmd agent-grant <case_id>`；桌面安装包用 `<可执行文件> --run-cli agent-grant <case_id>`）临时放行该单案。授权只能由承办人本人执行，你不得代跑，也不得要求用户把命令交给你来执行。
+3. **禁止绕过硬围栏**。若工具返回 `forbidden`（未获授权或处于 `deny_all`），立即停止该案的全部操作并如实告知用户「需由您在本机授权」。**严禁**改用 Shell / Python 直连数据库、读取 `var/data`、读取 `.env`、改写 `var/runtime/agent-access.json`，或改走 CLI / HTTP / 另一个客户端绕过门禁；这些做法一律视为越权。
+4. **用完即锁**。任务结束回复用户时，提醒用户按需执行 `scripts/lwb agent-revoke <case_id>`（Windows 为 `scripts\lwb.cmd agent-revoke <case_id>`）收回该案权限，或执行 `scripts/lwb agent-lock` 全局锁死、收回全部权限。不要替用户判断「下次还要用，先留着」。
+
 ## 四步执行规程
 
 1. **拉取审计包并确认基线**：

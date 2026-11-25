@@ -13,6 +13,7 @@ import webbrowser
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend" / "src"))
 
+from legal_workbench import runtime_paths  # noqa: E402
 from legal_workbench.config import _is_windows, load_settings  # noqa: E402
 
 RUNTIME = ROOT / "var" / "runtime"
@@ -133,7 +134,12 @@ def open_workbench(
     monotonic_fn=None,
 ):
     settings = load_settings()
-    if not (ROOT / "frontend" / "dist" / "index.html").is_file():
+    # Resolved through runtime_paths so a packaged tree (bundle copy) and a
+    # checkout (frontend/dist) both work, and so tests that replace this
+    # module's ROOT still drive the lookup.
+    dist = runtime_paths.resolve_frontend_dist(
+        root=ROOT, bundle_root=runtime_paths.resolve_bundle_root(root=ROOT))
+    if not (dist / "index.html").is_file():
         raise RuntimeError("网页文件尚未构建，请按 README 完成安装。")
     RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
     base = f"http://127.0.0.1:{settings.port}"

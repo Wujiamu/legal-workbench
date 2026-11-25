@@ -1,1 +1,27 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>法律工作台</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+<!doctype html>
+<html lang="zh-CN" data-theme="xuan">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1b1c1f">
+  <script>
+    try {
+      var t = localStorage.getItem('suzhang-theme');
+      var m = { xuan: '#1b1c1f', pure: '#faf9f6', ruyao: '#1e272e', zitan: '#2a2123', mono: '#1f1f1f' };
+      if (t && m[t]) {
+        document.documentElement.dataset.theme = t;
+        var el = document.querySelector('meta[name="theme-color"]');
+        if (el) el.content = m[t];
+      }
+    } catch (_) {}
+  </script>
+  <title>素章 · PlainFolio</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

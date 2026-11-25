@@ -25,6 +25,9 @@ from .graph_factories import build_segment
 from .test_api import new_case
 from .test_claims import _group, _item
 
+# 访问围栏由 test_agent_access_gate.py 覆盖；本文件显式放开以验证工具业务行为。
+pytestmark = pytest.mark.usefixtures("agent_access_open")
+
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 

@@ -1,0 +1,138 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""PyInstaller onedir spec for the 素章 / PlainFolio desktop application.
+
+Why ``onedir`` and not ``onefile``: a one-file build unpacks ~80 MB of
+PostgreSQL binaries and ONNX models into a temp directory on every launch,
+which is slow enough to look like a hang and is a well-known trigger for
+antivirus heuristics.  ``onedir`` also keeps the payload inspectable, so a
+support engineer can check ``_internal/runtime`` without running anything.
+
+Layout produced by this spec (``packaging/dist/PlainFolio/``):
+
+    PlainFolio(.exe)          the launcher (console subsystem: MCP needs stdio)
+    _internal/                Python runtime, packages, collected data
+    _internal/frontend/dist   built single-page app
+    _internal/backend/…       alembic.ini + migrations
+    _internal/plugins/…       portable agent plugin
+    _internal/runtime/…       added afterwards by packaging/stage_bundle.py
+
+``_internal`` is what ``sys._MEIPASS`` points at, and therefore what
+``legal_workbench.runtime_paths.resolve_bundle_root()`` returns at runtime.
+
+Build (from the repository root):
+
+    python -m PyInstaller --noconfirm --clean \
+        --distpath packaging/dist --workpath packaging/build packaging/plainfolio.spec
+"""
+from pathlib import Path
+
+from PyInstaller.utils.hooks import collect_data_files
+
+SPEC_DIR = Path(SPECPATH).resolve()          # noqa: F821 - injected by PyInstaller
+REPO_ROOT = SPEC_DIR.parent
+SRC = REPO_ROOT / "backend" / "src"
+ENTRY = SRC / "legal_workbench" / "desktop_launcher.py"
+
+datas = [
+    (str(REPO_ROOT / "frontend" / "dist"), "frontend/dist"),
+    (str(REPO_ROOT / "backend" / "migrations"), "backend/migrations"),
+    (str(REPO_ROOT / "backend" / "alembic.ini"), "backend"),
+    (str(REPO_ROOT / "plugins" / "plainfolio"), "plugins/plainfolio"),
+]
+
+# Data files that live inside third-party packages (ONNX runtime libraries, the
+# PDFium shared library, OCR dictionaries) and are not found by static analysis.
+for package in ("rapidocr_onnxruntime", "onnxruntime", "pypdfium2", "psycopg",
+                "psycopg_binary", "alembic", "mcp", "reportlab", "docx", "openpyxl"):
+    try:
+        datas += collect_data_files(package)
+    except Exception:  # noqa: BLE001 - a missing optional package is not fatal here
+        pass
+
+hiddenimports = [
+    "uvicorn.logging",
+    "uvicorn.loops",
+    "uvicorn.loops.auto",
+    "uvicorn.loops.asyncio",
+    "uvicorn.protocols",
+    "uvicorn.protocols.http",
+    "uvicorn.protocols.http.auto",
+    "uvicorn.protocols.http.h11_impl",
+    "uvicorn.protocols.websockets",
+    "uvicorn.protocols.websockets.auto",
+    "uvicorn.lifespan",
+    "uvicorn.lifespan.on",
+    "sqlalchemy.dialects.postgresql",
+    "sqlalchemy.dialects.postgresql.psycopg",
+    # Declared explicitly because several of these are imported lazily or only
+    # for their data files; a missing one shows up as a runtime ImportError in
+    # a frozen build, which is the most expensive place to find it.
+    "psycopg",
+    "psycopg_binary",
+    "rapidocr_onnxruntime",
+    "rapidocr_onnxruntime.main",
+    "onnxruntime",
+    "pypdfium2",
+    "pypdf",
+    "docx",
+    "openpyxl",
+    "reportlab",
+    "reportlab.pdfbase._cidfontdata",
+    "reportlab.pdfbase.cidfonts",
+    "alembic.runtime.migration",
+    "alembic.script",
+    "mcp.server",
+    "mcp.server.fastmcp",
+    "mcp.server.stdio",
+    "legal_workbench.desktop_launcher",
+    "legal_workbench.agent_access",
+    "legal_workbench.agent_access_cli",
+    "legal_workbench.mcp_server",
+    "legal_workbench.worker",
+    "legal_workbench.cli",
+    "legal_workbench.doctor",
+    "legal_workbench.backfill_progress",
+]
+
+a = Analysis(  # noqa: F821 - injected by PyInstaller
+    [str(ENTRY)],
+    pathex=[str(SRC)],
+    binaries=[],
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=["tkinter", "matplotlib", "PyQt5", "PySide6", "pytest"],
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure)  # noqa: F821
+
+exe = EXE(  # noqa: F821
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="PlainFolio",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,          # MCP runs over stdio; a windowed exe would lose it
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+coll = COLLECT(  # noqa: F821
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="PlainFolio",
+)

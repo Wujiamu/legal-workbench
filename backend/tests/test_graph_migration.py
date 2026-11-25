@@ -131,8 +131,8 @@ def test_upgrade_0006_to_0007_preserves_progress(drill_db):
         before_engine.dispose()
     assert NEW_TABLES.isdisjoint(before_schema)
 
-    # 2. upgrade to head
-    _alembic("upgrade", "head", migrator_url, app_url)
+    # 2. upgrade to 0007_graph_evidence (the target of this 0006 -> 0007 drill)
+    _alembic("upgrade", "0007_graph_evidence", migrator_url, app_url)
     engine = create_engine(sqlalchemy_url(app_url), future=True)
     try:
         _assert_upgraded(engine, before_schema, before_constraints, before_operations,
