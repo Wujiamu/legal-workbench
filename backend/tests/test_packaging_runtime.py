@@ -906,3 +906,21 @@ def test_gitignore_keeps_build_artifacts_out_but_not_the_tracked_app_bundle():
     assert ignored("packaging/dist/PlainFolio-0.1.0-macos-arm64.dmg")
     assert ignored("packaging/staging/macos/PlainFolio.app/Contents/Info.plist")
     assert not ignored("法律工作台.app/Contents/Info.plist")
+
+
+def test_mkdir_private_omits_0o700_on_windows_and_keeps_it_on_posix(monkeypatch, tmp_path):
+    calls: list[tuple[Path, dict]] = []
+
+    def fake_mkdir(self, parents=False, exist_ok=False, mode=0o777):
+        calls.append((self, {"parents": parents, "exist_ok": exist_ok, "mode": mode}))
+
+    monkeypatch.setattr(Path, "mkdir", fake_mkdir)
+    target = tmp_path / "var" / "runtime"
+
+    monkeypatch.setattr(desktop_launcher.os, "name", "nt")
+    desktop_launcher._mkdir_private(target)
+    assert calls[-1] == (target, {"parents": True, "exist_ok": True, "mode": 0o777})
+
+    monkeypatch.setattr(desktop_launcher.os, "name", "posix")
+    desktop_launcher._mkdir_private(target)
+    assert calls[-1] == (target, {"parents": True, "exist_ok": True, "mode": 0o700})

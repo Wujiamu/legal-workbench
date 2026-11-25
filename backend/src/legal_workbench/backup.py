@@ -139,7 +139,10 @@ def create_backup(session: Session, storage, destination: Path, *,
                   database_url: str, pg_bin: str | None = None) -> BackupResult:
     """Full backup: database dump plus every referenced managed file."""
     destination = _ensure_destination_outside_data(destination, storage.root)
-    destination.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name == "nt":
+        destination.mkdir(parents=True, exist_ok=True)
+    else:
+        destination.mkdir(parents=True, exist_ok=True, mode=0o700)
     marker = destination / INCOMPLETE_NAME
     marker.write_text(f"started_at={_utcnow()}\n", encoding="utf-8")
 

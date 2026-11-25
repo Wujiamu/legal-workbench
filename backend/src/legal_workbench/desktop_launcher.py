@@ -244,11 +244,25 @@ def database_running(layout: Layout, pg_bin: Path) -> bool:
     return status.returncode == 0
 
 
+def _mkdir_private(path: Path) -> None:
+    """Create a private directory without tripping Python 3.13's Windows 0o700 DACL.
+
+    On Windows, Python 3.13 ``mkdir(mode=0o700)`` builds a restrictive DACL for
+    SYSTEM + Administrators + OWNER RIGHTS and strips inherited user ACEs; when
+    an elevated process launches PostgreSQL tools, ``CreateRestrictedToken``
+    disables Administrators and locks PostgreSQL out of its own directory.
+    """
+    if os.name == "nt":
+        path.mkdir(parents=True, exist_ok=True)
+    else:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+
 def start_database(layout: Layout, pg_bin: Path) -> None:
     """Start the cluster if it is not already running (idempotent)."""
     if database_running(layout, pg_bin):
         return
-    layout.runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _mkdir_private(layout.runtime)
     subprocess.run(
         [_pg_tool(pg_bin, "pg_ctl"), "-D", str(layout.postgres),
          "-l", str(layout.postgres_log), "-w", "start"],
@@ -278,7 +292,7 @@ def stop_database(layout: Layout, pg_bin: Path | None) -> bool:
 
 def _write_private(path: Path, text: str) -> None:
     """Create ``path`` with ``0600`` and never overwrite an existing file."""
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _mkdir_private(path.parent)
     fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(text)
@@ -315,7 +329,7 @@ def _abort_initialization(layout: Layout, stop: Callable[[], object],
     for target in (layout.env_file, layout.pgpass, layout.runtime / "init-password"):
         target.unlink(missing_ok=True)
     shutil.rmtree(layout.postgres, ignore_errors=True)
-    layout.runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _mkdir_private(layout.runtime)
     stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     try:
         layout.failure_log.write_text(
@@ -348,9 +362,9 @@ def initialize_home(home: Path | str, *, pg_bin: Path | str,
     stop = (lambda: stop_database(layout, pg_bin)) if stop_db is None else stop_db
     migrate_db = apply_migrations if migrate is None else migrate
 
-    layout.runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
-    layout.data.mkdir(parents=True, exist_ok=True, mode=0o700)
-    layout.backups.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _mkdir_private(layout.runtime)
+    _mkdir_private(layout.data)
+    _mkdir_private(layout.backups)
     super_pw, migrator_pw, app_pw = (secrets.token_urlsafe(32) for _ in range(3))
     pwfile = layout.runtime / "init-password"
     pwfile.unlink(missing_ok=True)  # a hard-killed earlier attempt may have left one
@@ -554,7 +568,7 @@ def _release_lock(handle) -> None:
 def instance_lock(path: Path, *, timeout: float = 15.0,
                   sleep: Callable[[float], None] = time.sleep):
     """Exclusive per-home lock; a second double click waits, then gives up."""
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _mkdir_private(path.parent)
     handle = path.open("a+b")
     try:
         if handle.tell() == 0:
@@ -624,7 +638,7 @@ def _terminate(children: list) -> None:
 
 
 def _write_state(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _mkdir_private(path.parent)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -747,7 +761,7 @@ def _run_doctor() -> int:
 def _prepare_home() -> Path:
     """Resolve the writable home, create it, and pin it for every child."""
     home = config.resolve_home_dir()
-    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _mkdir_private(home)
     os.environ[config.HOME_ENV] = str(home)
     return home
 

@@ -192,24 +192,6 @@ jobs:
                 Get-Content -Raw -Encoding utf8 $lp
               }
             }
-            Write-Host "=== whoami ==="
-            whoami /user /groups
-            Write-Host "=== icacls smokeBase ==="
-            icacls $smokeBase
-            $rtDir = Join-Path $smokeHome "var\runtime"
-            if (Test-Path $rtDir) {
-              Write-Host "=== icacls var\runtime ==="
-              icacls $rtDir
-            }
-            Write-Host "=== diag os.open(0o600) + initdb ==="
-            $diagPw = Join-Path $smokeBase "diag-pw.txt"
-            $diagPg = Join-Path $smokeBase "diag-pg"
-            backend\.venv\Scripts\python.exe -c "import os; fd = os.open(r'$diagPw', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600); os.write(fd, b'testpw123\n'); os.close(fd)"
-            icacls $diagPw
-            attrib $diagPw
-            $initdbExe = Join-Path $distDir "_internal\runtime\postgres\bin\initdb.exe"
-            & $initdbExe -D $diagPg -U lwb_super --auth=scram-sha-256 --pwfile $diagPw --encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8
-            Write-Host "diag initdb exit: $LASTEXITCODE"
             throw
           }
           finally {
