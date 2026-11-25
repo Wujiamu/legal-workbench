@@ -153,11 +153,15 @@ jobs:
       - name: Smoke-test frozen Windows binary
         run: |
           $exe = Resolve-Path "packaging\dist\PlainFolio\PlainFolio.exe"
-          $smokeBase = Join-Path $env:LOCALAPPDATA "PlainFolio-smoke"
+          $distDir = Split-Path $exe -Parent
+          $smokeBase = "C:\PlainFolioSmoke"
           $smokeHome = Join-Path $smokeBase "home"
           if (Test-Path $smokeBase) { Remove-Item -Recurse -Force $smokeBase }
           New-Item -ItemType Directory -Path $smokeHome -Force | Out-Null
-          icacls $smokeBase /grant "$($env:USERNAME):(OI)(CI)F" /T | Out-Null
+          icacls $smokeBase /grant "*S-1-1-0:(OI)(CI)F" "*S-1-5-11:(OI)(CI)F" "$($env:USERNAME):(OI)(CI)F" /T
+          if ($LASTEXITCODE -ne 0) { throw "icacls smokeBase failed ($LASTEXITCODE)" }
+          icacls $distDir /grant "*S-1-1-0:(OI)(CI)RX" /T | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "icacls distDir failed ($LASTEXITCODE)" }
           $env:LWB_HOME = $smokeHome
           $env:LWB_INSTANCE_CONFIG = Join-Path $smokeBase "instance.json"
           $env:LWB_AGENT_ACCESS_FILE = Join-Path $smokeBase "agent-access.json"
@@ -188,6 +192,24 @@ jobs:
                 Get-Content -Raw -Encoding utf8 $lp
               }
             }
+            Write-Host "=== whoami ==="
+            whoami /user /groups
+            Write-Host "=== icacls smokeBase ==="
+            icacls $smokeBase
+            $rtDir = Join-Path $smokeHome "var\runtime"
+            if (Test-Path $rtDir) {
+              Write-Host "=== icacls var\runtime ==="
+              icacls $rtDir
+            }
+            Write-Host "=== diag os.open(0o600) + initdb ==="
+            $diagPw = Join-Path $smokeBase "diag-pw.txt"
+            $diagPg = Join-Path $smokeBase "diag-pg"
+            backend\.venv\Scripts\python.exe -c "import os; fd = os.open(r'$diagPw', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600); os.write(fd, b'testpw123\n'); os.close(fd)"
+            icacls $diagPw
+            attrib $diagPw
+            $initdbExe = Join-Path $distDir "_internal\runtime\postgres\bin\initdb.exe"
+            & $initdbExe -D $diagPg -U lwb_super --auth=scram-sha-256 --pwfile $diagPw --encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8
+            Write-Host "diag initdb exit: $LASTEXITCODE"
             throw
           }
           finally {
