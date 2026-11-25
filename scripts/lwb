@@ -136,6 +136,7 @@ def initialize():
         "PGPORT": "55432",
         "PGUSER": SUPERUSER,
         "PGPASSFILE": str(RUNTIME / "pgpass"),
+        "PGPASSWORD": super_pw,
     })
     pg_ctl = _pg_tool(pg_bin, "pg_ctl")
     psql = _pg_tool(pg_bin, "psql")

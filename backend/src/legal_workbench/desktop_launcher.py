@@ -390,6 +390,7 @@ def initialize_home(home: Path | str, *, pg_bin: Path | str,
         env = pg_env(extra={
             "PGHOST": "127.0.0.1", "PGPORT": str(PG_PORT),
             "PGUSER": SUPERUSER, "PGPASSFILE": str(layout.pgpass),
+            "PGPASSWORD": super_pw,
         })
         psql = _pg_tool(pg_bin, "psql")
         # The migration role owns schema objects; the application role gets DML
