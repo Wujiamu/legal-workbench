@@ -38,6 +38,9 @@ describe('带图例的 SVG 导出', () => {
     expect(svg).toContain('marker-end="url(#arrow-evidenced)"');
     expect(svg).toContain('已排除');
     expect(svg).toContain('内部工作图');
+    expect(svg).toContain('<metadata>');
+    expect(svg).toContain('<dc:creator>PlainFolio (素章)</dc:creator>');
+    expect(svg).toContain(`<dc:title>${graph.title}</dc:title>`);
     expect(svg.startsWith('<svg')).toBe(true);
     expect(svg.endsWith('</svg>')).toBe(true);
   });
@@ -81,6 +84,8 @@ describe('带图例的 SVG 导出', () => {
       rules: defaultRules,
     });
     expect(svg).toContain('A&amp;B &lt;关系&gt; &quot;图&quot;');
+    expect(svg).toContain('<dc:title>A&amp;B &lt;关系&gt; &quot;图&quot;</dc:title>');
+    expect(svg).toContain('<dc:creator>PlainFolio (素章)</dc:creator>');
     expect(svg).toContain('O&apos;Neil 案');
     expect(exportFileName('股权与实控关系', 'svg', new Date('2026-11-21T02:00:00Z')))
       .toBe('股权与实控关系-2026-11-21.svg');

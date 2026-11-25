@@ -5,6 +5,7 @@
  * 绝不读取或输出内部 calc_note 与 relative_source。
  */
 import { downloadPngFile, downloadSvgFile, exportFileName } from '../graph/exportSvg';
+import { buildSvgMetadata } from '../ui/exportMeta';
 import { formatCompactCents } from './money';
 import { CURRENCY_LABELS } from './types';
 import type { ClaimItem, Currency } from './types';
@@ -129,6 +130,7 @@ export function buildClaimsSvg(input: ClaimsSvgExportInput): {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" `
     + `viewBox="0 0 ${width} ${height}" font-family='${FONT}'>`,
   );
+  parts.push(buildSvgMetadata(input.title));
   parts.push(`<rect width="${width}" height="${height}" fill="#ffffff"/>`);
 
   // 页眉

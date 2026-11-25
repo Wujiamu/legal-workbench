@@ -6,6 +6,7 @@
 import { credibilityRule, entityKindLabel, relationKindLabel, roleLabel } from './rules';
 import type { CanvasEdge, CanvasGroup, CanvasModel, CanvasNode, GraphRules } from './types';
 import { NODE_HEIGHT, NODE_WIDTH } from './layout';
+import { buildSvgMetadata } from '../ui/exportMeta';
 
 const PAD = 36;
 const HEADER = 78;
@@ -121,6 +122,7 @@ export function buildGraphSvg(input: ExportInput): { svg: string; width: number;
 
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" `
     + `viewBox="0 0 ${width} ${height}" font-family='${FONT}'>`);
+  parts.push(buildSvgMetadata(input.title));
   parts.push('<defs>');
   for (const rule of legendRules) {
     parts.push(`<marker id="arrow-${rule.value}" viewBox="0 0 10 10" refX="9" refY="5" `

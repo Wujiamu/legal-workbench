@@ -62,6 +62,9 @@ describe('buildClaimsSvg · 内部工作态与对外态投影', () => {
     expect(svg).not.toContain('NaN');
 
     expect(svg).toContain(group.title);
+    expect(svg).toContain('<metadata>');
+    expect(svg).toContain('<dc:creator>PlainFolio (素章)</dc:creator>');
+    expect(svg).toContain(`<dc:title>${group.title}</dc:title>`);
     expect(svg).toContain('人民币（CNY）');
     expect(svg).toContain('内部工作态 · 精确到分');
     expect(svg).toContain('导出 2026-11-22 10:00');
@@ -142,6 +145,8 @@ describe('buildClaimsSvg · 内部工作态与对外态投影', () => {
     });
 
     expect(svg).toContain(modeLabel);
+    expect(svg).toContain('<metadata>');
+    expect(svg).toContain('<dc:creator>PlainFolio (素章)</dc:creator>');
     expect(svg).toContain('冻结 2026-11-22T08:00:00Z');
     expect(svg).toContain('摘要 abcdef123456');
     expect(svg).not.toContain(fullDigest);
@@ -202,6 +207,8 @@ describe('buildClaimsSvg · 内部工作态与对外态投影', () => {
     });
 
     expect(svg).toContain('主诉请 &lt;1&gt; &amp; &quot;2&quot;');
+    expect(svg).toContain('<dc:title>主诉请 &lt;1&gt; &amp; &quot;2&quot;</dc:title>');
+    expect(svg).toContain('<dc:creator>PlainFolio (素章)</dc:creator>');
     expect(svg).toContain('O&apos;Neil &amp; Co');
     expect(svg).toContain('A&amp;B &lt;违约金&gt;');
     expect(svg).toContain('[1] 证据&lt;1&gt; &amp; &quot;附页&quot;');

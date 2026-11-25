@@ -262,6 +262,11 @@ def test_bundle_complete_layout_pages_docx_csv_and_splits(db, store):
         pdf11_name = next(n for n in split_names if n.startswith("02_分项证据材料/证据1-1_") and n.endswith(".pdf"))
         pdf11 = PdfReader(io.BytesIO(zf.read(pdf11_name)))
         assert len(pdf11.pages) == 2
+        assert pdf11.metadata is not None
+        assert str(pdf11.metadata.get("/Creator", "")).startswith("PlainFolio (素章)")
+        assert str(pdf11.metadata.get("/Producer", "")).startswith("PlainFolio (素章)")
+        assert "证据1-1" in str(pdf11.metadata.get("/Title", ""))
+        assert str(pdf11.metadata.get("/CreationDate", "")).startswith("D:")
         text11 = "\n".join(p.extract_text() or "" for p in pdf11.pages)
         assert "CONTRACT_P2" in text11
         assert "CONTRACT_P3" in text11
@@ -277,6 +282,11 @@ def test_bundle_complete_layout_pages_docx_csv_and_splits(db, store):
         assert len(merged_pdf.pages) == result.summary["total_pdf_pages"]
         assert len(merged_pdf.pages) >= 18
         assert len(merged_pdf.outline) >= 4  # 封面, 证据目录, 第1组, 第2组
+        assert merged_pdf.metadata is not None
+        assert str(merged_pdf.metadata.get("/Creator", "")).startswith("PlainFolio (素章)")
+        assert str(merged_pdf.metadata.get("/Producer", "")).startswith("PlainFolio (素章)")
+        assert "虚构设备买卖纠纷案（一审）" in str(merged_pdf.metadata.get("/Title", ""))
+        assert str(merged_pdf.metadata.get("/CreationDate", "")).startswith("D:")
 
         # Verify A4 dimensions on all pages (either portrait or landscape)
         for p in merged_pdf.pages:
@@ -302,7 +312,16 @@ def test_bundle_complete_layout_pages_docx_csv_and_splits(db, store):
         assert page_ranges == ["第 1-2 页", "第 3 页", "第 4-7 页", "第 8-10 页", "第 11 页"]
 
         # Check DOCX catalog matches exact table rows and signature block
-        docx = DocxDocument(io.BytesIO(zf.read("01_证据目录.docx")))
+        raw_docx = zf.read("01_证据目录.docx")
+        docx = DocxDocument(io.BytesIO(raw_docx))
+        assert docx.core_properties.author == "PlainFolio (素章)"
+        assert "PlainFolio (素章)" in (docx.core_properties.comments or "")
+        assert "虚构设备买卖纠纷案（一审）" in (docx.core_properties.title or "")
+        assert docx.core_properties.created is not None and docx.core_properties.created.year >= 2025
+        with zipfile.ZipFile(io.BytesIO(raw_docx), "r") as docx_zf:
+            app_xml = docx_zf.read("docProps/app.xml").decode("utf-8")
+            assert "PlainFolio (素章)" in app_xml
+            assert "Microsoft Macintosh Word" not in app_xml
         assert len(docx.tables) == 1
         table_text = "\n".join(cell.text for row in docx.tables[0].rows for cell in row.cells)
         assert "证据1-1" in table_text
@@ -310,6 +329,12 @@ def test_bundle_complete_layout_pages_docx_csv_and_splits(db, store):
         assert "第 8-10 页" in table_text
         para_text = "\n".join(p.text for p in docx.paragraphs)
         assert "提交人（签字/盖章）" in para_text
+
+        # Original non-PDF electronic material MUST remain untouched (original bytes preserved)
+        orig_docx_name = next(n for n in split_names if n.startswith("02_分项证据材料/证据2-2_") and n.endswith(".docx"))
+        orig_docx = DocxDocument(io.BytesIO(zf.read(orig_docx_name)))
+        assert any("TEST-ONLY Complaint" in p.text for p in orig_docx.paragraphs)
+        assert orig_docx.core_properties.author != "PlainFolio (素章)"
 
 
 def test_bundle_http_endpoint_active_archived_and_errors(db, client):
