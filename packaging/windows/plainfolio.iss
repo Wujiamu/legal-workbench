@@ -1,4 +1,4 @@
-; 素章 PlainFolio — Windows 安装向导（Inno Setup 6）
+﻿; 素章 PlainFolio — Windows 安装向导（Inno Setup 6）
 ;
 ; 由 packaging/build_windows_exe.py 调用编译，也可手工执行：
 ;   ISCC.exe /DAppVersion=0.1.0 ^
@@ -15,7 +15,7 @@
 #define AppDisplayName "素章 PlainFolio"
 #define AppExeName "PlainFolio.exe"
 #define AppPublisher "素章 PlainFolio"
-#define AppUrl "https://github.com/"
+#define AppUrl "https://github.com/Wujiamu/legal-workbench"
 #ifndef AppVersion
   #define AppVersion "0.1.0"
 #endif

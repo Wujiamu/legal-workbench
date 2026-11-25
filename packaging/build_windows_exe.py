@@ -86,7 +86,7 @@ def validate(source_root: Path, *, iss: Path, spec: Path,
         problems.append(f"安装脚本不存在：{iss}")
     else:
         try:
-            text = iss.read_text(encoding="utf-8")
+            text = iss.read_text(encoding="utf-8-sig")
         except OSError as exc:
             problems.append(f"安装脚本无法读取：{exc}")
         else:

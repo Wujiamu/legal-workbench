@@ -151,6 +151,7 @@ ISS_SECTIONS = re.compile(r"(?m)^\s*\[([^\]]+)\]\s*$")
 
 def iss_sections(text: str) -> dict[str, list[str]]:
     """Split an ``.iss`` file into ``{section: [lines]}`` for static checks."""
+    text = text.lstrip("\ufeff")
     sections: dict[str, list[str]] = {}
     current: str | None = None
     for line in text.splitlines():

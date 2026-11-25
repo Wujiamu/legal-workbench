@@ -26,7 +26,7 @@ Build (from the repository root):
 """
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 SPEC_DIR = Path(SPECPATH).resolve()          # noqa: F821 - injected by PyInstaller
 REPO_ROOT = SPEC_DIR.parent
@@ -39,13 +39,22 @@ datas = [
     (str(REPO_ROOT / "backend" / "alembic.ini"), "backend"),
     (str(REPO_ROOT / "plugins" / "plainfolio"), "plugins/plainfolio"),
 ]
+binaries = []
 
 # Data files that live inside third-party packages (ONNX runtime libraries, the
 # PDFium shared library, OCR dictionaries) and are not found by static analysis.
-for package in ("rapidocr_onnxruntime", "onnxruntime", "pypdfium2", "psycopg",
-                "psycopg_binary", "alembic", "mcp", "reportlab", "docx", "openpyxl"):
+for package in ("rapidocr_onnxruntime", "onnxruntime", "pypdfium2", "pypdfium2_raw",
+                "psycopg", "psycopg_binary", "alembic", "mcp", "reportlab",
+                "docx", "openpyxl", "lxml"):
     try:
         datas += collect_data_files(package)
+    except Exception:  # noqa: BLE001 - a missing optional package is not fatal here
+        pass
+
+for package in ("pypdfium2_raw", "pypdfium2", "onnxruntime", "rapidocr_onnxruntime",
+                "psycopg_binary", "lxml"):
+    try:
+        binaries += collect_dynamic_libs(package)
     except Exception:  # noqa: BLE001 - a missing optional package is not fatal here
         pass
 
@@ -73,9 +82,13 @@ hiddenimports = [
     "rapidocr_onnxruntime.main",
     "onnxruntime",
     "pypdfium2",
+    "pypdfium2_raw",
     "pypdf",
     "docx",
     "openpyxl",
+    "lxml",
+    "lxml.etree",
+    "lxml._elementpath",
     "reportlab",
     "reportlab.pdfbase._cidfontdata",
     "reportlab.pdfbase.cidfonts",
@@ -87,6 +100,8 @@ hiddenimports = [
     "legal_workbench.desktop_launcher",
     "legal_workbench.agent_access",
     "legal_workbench.agent_access_cli",
+    "legal_workbench.dossier_export",
+    "legal_workbench.chart_export",
     "legal_workbench.mcp_server",
     "legal_workbench.worker",
     "legal_workbench.cli",
@@ -97,7 +112,7 @@ hiddenimports = [
 a = Analysis(  # noqa: F821 - injected by PyInstaller
     [str(ENTRY)],
     pathex=[str(SRC)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

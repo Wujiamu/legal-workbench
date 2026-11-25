@@ -1,0 +1,360 @@
+name: Build and Release Desktop Installers
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Application version override (defaults to tag or backend/pyproject.toml)"
+        required: false
+        default: ""
+        type: string
+      publish_release:
+        description: "Create/update GitHub Release with built installers"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  PG_VERSION: "18.3-1"
+  WIN_PG_URL: "https://get.enterprisedb.com/postgresql/postgresql-18.3-1-windows-x64-binaries.zip"
+  MAC_PG_URL: "https://get.enterprisedb.com/postgresql/postgresql-18.3-1-osx-binaries.zip"
+  INNO_ZH_URL: "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl"
+
+jobs:
+  build-windows:
+    name: Windows x64 (.exe)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      installer_name: ${{ steps.meta.outputs.installer_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: meta
+        run: |
+          $ver = "${{ inputs.version }}".Trim()
+          if (-not $ver -and "$env:GITHUB_REF".StartsWith("refs/tags/v")) {
+            $ver = "$env:GITHUB_REF".Substring("refs/tags/v".Length)
+          }
+          if (-not $ver) {
+            $pyproject = Get-Content -Raw -Encoding utf8 "backend/pyproject.toml"
+            if ($pyproject -match '(?m)^\s*version\s*=\s*"([^"]+)"') {
+              $ver = $Matches[1]
+            }
+          }
+          if (-not $ver) {
+            throw "Unable to resolve application version"
+          }
+          $tag = if ("$env:GITHUB_REF".StartsWith("refs/tags/")) { "$env:GITHUB_REF_NAME" } else { "v$ver" }
+          $installerName = "PlainFolio-Setup-$ver-x64.exe"
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "installer_name=$installerName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "APP_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install backend environment and PyInstaller
+        working-directory: backend
+        run: |
+          uv sync --locked
+          uv pip install --python .venv\Scripts\python.exe "pyinstaller>=6.10,<7"
+
+      - name: Stage local OCR models
+        run: |
+          backend\.venv\Scripts\python.exe scripts\install_ocr_models.py --force
+          if (-not (Test-Path "var\models\rapidocr\manifest.json")) {
+            throw "Missing var\models\rapidocr\manifest.json"
+          }
+
+      - name: Download portable PostgreSQL 18 (${{ env.PG_VERSION }})
+        run: |
+          $pgZip = Join-Path $env:RUNNER_TEMP "pg18-win.zip"
+          $pgExtract = Join-Path $env:RUNNER_TEMP "pg18"
+          Invoke-WebRequest -Uri $env:WIN_PG_URL -OutFile $pgZip
+          Expand-Archive -Path $pgZip -DestinationPath $pgExtract -Force
+          $pgRoot = Join-Path $pgExtract "pgsql"
+          foreach ($tool in @("initdb.exe", "pg_ctl.exe", "postgres.exe")) {
+            if (-not (Test-Path (Join-Path $pgRoot "bin\$tool"))) {
+              throw "Missing PostgreSQL tool: $tool"
+            }
+          }
+
+      - name: Ensure Inno Setup 6 and ChineseSimplified.isl
+        run: |
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) {
+            throw "ISCC.exe not found after installation"
+          }
+          $langDir = Join-Path (Split-Path $iscc -Parent) "Languages"
+          New-Item -ItemType Directory -Path $langDir -Force | Out-Null
+          $islPath = Join-Path $langDir "ChineseSimplified.isl"
+          if (-not (Test-Path $islPath)) {
+            Invoke-WebRequest -Uri $env:INNO_ZH_URL -OutFile $islPath
+          }
+          $islText = Get-Content -Raw -Encoding utf8 $islPath
+          if ($islText -notmatch "\[LangOptions\]") {
+            throw "Invalid ChineseSimplified.isl downloaded"
+          }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build Windows installer (.exe)
+        run: |
+          $pgRoot = Join-Path $env:RUNNER_TEMP "pg18\pgsql"
+          backend\.venv\Scripts\python.exe packaging\build_windows_exe.py `
+            --pg-dir "$pgRoot" `
+            --models-dir "var\models" `
+            --version "$env:APP_VERSION"
+
+      - name: Smoke-test frozen Windows binary
+        run: |
+          $exe = Resolve-Path "packaging\dist\PlainFolio\PlainFolio.exe"
+          $smokeHome = Join-Path $env:RUNNER_TEMP "smoke-home-win"
+          New-Item -ItemType Directory -Path $smokeHome -Force | Out-Null
+          $env:LWB_HOME = $smokeHome
+          $env:LWB_INSTANCE_CONFIG = Join-Path $env:RUNNER_TEMP "smoke-instance-win.json"
+          $env:LWB_AGENT_ACCESS_FILE = Join-Path $env:RUNNER_TEMP "smoke-agent-access-win.json"
+          try {
+            & $exe --version
+            if ($LASTEXITCODE -ne 0) { throw "--version failed ($LASTEXITCODE)" }
+
+            & $exe --init-only
+            if ($LASTEXITCODE -ne 0) { throw "--init-only failed ($LASTEXITCODE)" }
+
+            & $exe --start-db
+            if ($LASTEXITCODE -ne 0) { throw "--start-db failed ($LASTEXITCODE)" }
+
+            & $exe --run-doctor
+            if ($LASTEXITCODE -ne 0) { throw "--run-doctor failed ($LASTEXITCODE)" }
+
+            & $exe --run-cli check-consistency
+            if ($LASTEXITCODE -ne 0) { throw "--run-cli check-consistency failed ($LASTEXITCODE)" }
+
+            & $exe --run-cli agent-status
+            if ($LASTEXITCODE -ne 0) { throw "--run-cli agent-status failed ($LASTEXITCODE)" }
+          }
+          finally {
+            & $exe --stop
+          }
+
+      - name: Generate SHA-256 checksum
+        run: |
+          $installer = "packaging\dist\${{ steps.meta.outputs.installer_name }}"
+          if (-not (Test-Path $installer)) {
+            throw "Installer missing: $installer"
+          }
+          $hash = (Get-FileHash -Path $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  ${{ steps.meta.outputs.installer_name }}" | Out-File -FilePath "$installer.sha256" -Encoding ascii -NoNewline
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainfolio-windows-x64
+          path: |
+            packaging/dist/${{ steps.meta.outputs.installer_name }}
+            packaging/dist/${{ steps.meta.outputs.installer_name }}.sha256
+          if-no-files-found: error
+
+  build-macos:
+    name: macOS arm64 (.dmg)
+    runs-on: macos-15
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      dmg_name: ${{ steps.meta.outputs.dmg_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: meta
+        run: |
+          VER="${{ inputs.version }}"
+          VER="$(printf '%s' "$VER" | xargs)"
+          if [ -z "$VER" ] && [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          fi
+          if [ -z "$VER" ]; then
+            VER="$(python3 -c 'import re, pathlib; text = pathlib.Path("backend/pyproject.toml").read_text(encoding="utf-8"); m = re.search(r"(?m)^\s*version\s*=\s*\"([^\"]+)\"", text); assert m, "version not found"; print(m.group(1))')"
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            TAG="v$VER"
+          fi
+          DMG_NAME="PlainFolio-${VER}-macos-arm64.dmg"
+          {
+            echo "version=$VER"
+            echo "tag=$TAG"
+            echo "dmg_name=$DMG_NAME"
+          } >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION=$VER" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install backend environment and PyInstaller
+        working-directory: backend
+        run: |
+          uv sync --locked
+          uv pip install --python .venv/bin/python "pyinstaller>=6.10,<7"
+
+      - name: Stage local OCR models
+        run: |
+          backend/.venv/bin/python scripts/install_ocr_models.py --force
+          test -f var/models/rapidocr/manifest.json
+
+      - name: Download portable PostgreSQL 18 (${{ env.PG_VERSION }})
+        run: |
+          PG_ZIP="$RUNNER_TEMP/pg18-mac.zip"
+          PG_EXTRACT="$RUNNER_TEMP/pg18"
+          curl -fsSL "$MAC_PG_URL" -o "$PG_ZIP"
+          mkdir -p "$PG_EXTRACT"
+          unzip -q "$PG_ZIP" -d "$PG_EXTRACT"
+          for tool in initdb pg_ctl postgres; do
+            test -x "$PG_EXTRACT/pgsql/bin/$tool"
+          done
+
+      - name: Build macOS disk image (.dmg)
+        run: |
+          backend/.venv/bin/python packaging/build_macos_dmg.py \
+            --pg-dir "$RUNNER_TEMP/pg18/pgsql" \
+            --models-dir "var/models" \
+            --version "$APP_VERSION"
+
+      - name: Mount .dmg and smoke-test frozen macOS binary
+        run: |
+          DMG_PATH="packaging/dist/${{ steps.meta.outputs.dmg_name }}"
+          test -f "$DMG_PATH"
+          MOUNT_DIR="$RUNNER_TEMP/dmg-mount"
+          mkdir -p "$MOUNT_DIR"
+          hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$MOUNT_DIR"
+
+          SMOKE_HOME="$RUNNER_TEMP/smoke-home-mac"
+          mkdir -p "$SMOKE_HOME"
+          export LWB_HOME="$SMOKE_HOME"
+          export LWB_INSTANCE_CONFIG="$RUNNER_TEMP/smoke-instance-mac.json"
+          export LWB_AGENT_ACCESS_FILE="$RUNNER_TEMP/smoke-agent-access-mac.json"
+          BIN="$MOUNT_DIR/PlainFolio.app/Contents/MacOS/PlainFolio"
+
+          cleanup() {
+            set +e
+            if [ -x "$BIN" ]; then
+              "$BIN" --stop || true
+            fi
+            hdiutil detach "$MOUNT_DIR" -force || true
+          }
+          trap cleanup EXIT
+
+          "$BIN" --version
+          "$BIN" --init-only
+          "$BIN" --start-db
+          "$BIN" --run-doctor
+          "$BIN" --run-cli check-consistency
+          "$BIN" --run-cli agent-status
+
+      - name: Generate SHA-256 checksum
+        run: |
+          cd packaging/dist
+          DMG_NAME="${{ steps.meta.outputs.dmg_name }}"
+          shasum -a 256 "$DMG_NAME" > "${DMG_NAME}.sha256"
+
+      - name: Upload macOS .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainfolio-macos-arm64
+          path: |
+            packaging/dist/${{ steps.meta.outputs.dmg_name }}
+            packaging/dist/${{ steps.meta.outputs.dmg_name }}.sha256
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Combine checksums and publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-windows.outputs.tag }}
+          WIN_EXE: ${{ needs.build-windows.outputs.installer_name }}
+          MAC_DMG: ${{ needs.build-macos.outputs.dmg_name }}
+        run: |
+          mkdir -p upload
+          cp "release-assets/plainfolio-windows-x64/$WIN_EXE" upload/
+          cp "release-assets/plainfolio-macos-arm64/$MAC_DMG" upload/
+          (
+            cd upload
+            sha256sum "$WIN_EXE" "$MAC_DMG" > SHA256SUMS.txt
+          )
+          cat upload/SHA256SUMS.txt
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "upload/$WIN_EXE" "upload/$MAC_DMG" "upload/SHA256SUMS.txt" --clobber
+          else
+            gh release create "$TAG" "upload/$WIN_EXE" "upload/$MAC_DMG" "upload/SHA256SUMS.txt" \
+              --title "PlainFolio $TAG" \
+              --generate-notes
+          fi
