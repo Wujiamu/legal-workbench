@@ -903,6 +903,18 @@ class ProgressRulesQuery(Contract):
     pass
 
 
+class ModulesOutput(Contract):
+    """Enabled/optional module surfaces of this installation (read-only)."""
+
+    enabled_modules: list[str]
+    all_modules: list[str]
+
+
+class ModulesQuery(Contract):
+    """GET /modules takes no input; placeholder for the protocol generator."""
+    pass
+
+
 # --- 主体关系图与证据目录协议（P2）-------------------------------------------
 # 与 docs/changes/20261120-案件主体关系图.md 5.2/5.3 的命令契约对应。
 # actor 由入口固定，输入里不出现 actor/entry。

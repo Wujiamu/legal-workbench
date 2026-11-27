@@ -1,0 +1,38 @@
+[project]
+name = "plainfolio-parse"
+version = "0.1.0"
+description = "素章（PlainFolio）零数据库离线阅卷解析内核：TXT/DOCX/XLSX/PDF/图片解析、本地 OCR 降级、精确金额与日期、跨文件强指纹碰撞排查、表格列预览，附 CLI 与 stdio MCP。"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "Apache-2.0"
+keywords = ["legal", "parse", "ocr", "pdf", "docx", "xlsx", "plainfolio", "素章"]
+# 最小依赖：只保留文档解析与 MCP 服务所需，绝不引入数据库/HTTP 服务栈。
+# OCR 一律走可选组 `[ocr]`，核心安装不拖 onnxruntime 与识别模型。
+# `mcp` 上界锁 <2：本包用 v1 的 `mcp.server.fastmcp.FastMCP` 注册工具（与工作台
+# 一致）；mcp 2.x 把 FastMCP 改名为 MCPServer 并改了注册/运行语义，放开上界会让
+# 一次普通 `pip install` 变成"服务启动即断开"。升级需单独迁移并回归。
+dependencies = [
+  "pypdfium2>=5.15.2",
+  "python-docx>=1.2.0",
+  "openpyxl>=3.1.5",
+  "pillow>=13.0.0",
+  "pydantic>=2.11.5",
+  "mcp>=1.30.0,<2",
+]
+
+[project.optional-dependencies]
+ocr = ["rapidocr-onnxruntime>=1.4.4"]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+plainfolio-parse = "plainfolio_parse.cli:main"
+plainfolio-parse-mcp = "plainfolio_parse.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plainfolio_parse"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/plainfolio_parse", "README.md"]

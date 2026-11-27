@@ -31,6 +31,12 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 SPEC_DIR = Path(SPECPATH).resolve()          # noqa: F821 - injected by PyInstaller
 REPO_ROOT = SPEC_DIR.parent
 SRC = REPO_ROOT / "backend" / "src"
+# 仓库内第一方独立包（法院自动装卷器 / 离线阅卷解析内核）：可编辑安装时由 path 源
+# 引入，冻结时必须显式把两处源码目录放进 pathex，否则运行期才 ImportError。
+PACKAGES_SRC = (
+    REPO_ROOT / "packages" / "plainfolio-dossier" / "src",
+    REPO_ROOT / "packages" / "plainfolio-parse" / "src",
+)
 ENTRY = SRC / "legal_workbench" / "desktop_launcher.py"
 
 datas = [
@@ -107,11 +113,43 @@ hiddenimports = [
     "legal_workbench.cli",
     "legal_workbench.doctor",
     "legal_workbench.backfill_progress",
+    # 仓库内第一方独立包（法院自动装卷器）：可编辑安装时由 path 源引入，
+    # 静态分析未必跟得上，显式登记每个子模块，避免冻结后运行期才 ImportError。
+    "plainfolio_dossier",
+    "plainfolio_dossier.builder",
+    "plainfolio_dossier.models",
+    "plainfolio_dossier.errors",
+    "plainfolio_dossier.path_fence",
+    "plainfolio_dossier.manifest",
+    "plainfolio_dossier.cli",
+    "plainfolio_dossier.mcp_server",
+    # 零数据库离线阅卷解析内核：解析器、精确值、强指纹与表格工具都要逐个登记，
+    # 这些模块大量使用惰性导入（按扩展名分派），静态分析跟不到。
+    "plainfolio_parse",
+    "plainfolio_parse.config",
+    "plainfolio_parse.errors",
+    "plainfolio_parse.textnorm",
+    "plainfolio_parse.path_fence",
+    "plainfolio_parse.exact_values",
+    "plainfolio_parse.identifiers",
+    "plainfolio_parse.tables",
+    "plainfolio_parse.markdown_export",
+    "plainfolio_parse.formats",
+    "plainfolio_parse.formats.base",
+    "plainfolio_parse.formats.text",
+    "plainfolio_parse.formats.docx",
+    "plainfolio_parse.formats.xlsx",
+    "plainfolio_parse.formats.pdf",
+    "plainfolio_parse.formats.images",
+    "plainfolio_parse.formats.ocr",
+    "plainfolio_parse.formats.dispatch",
+    "plainfolio_parse.cli",
+    "plainfolio_parse.mcp_server",
 ]
 
 a = Analysis(  # noqa: F821 - injected by PyInstaller
     [str(ENTRY)],
-    pathex=[str(SRC)],
+    pathex=[str(SRC), *(str(path) for path in PACKAGES_SRC)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

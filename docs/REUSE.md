@@ -1,6 +1,6 @@
 # 复用与依赖来源
 
-本文件记录 V0.1 实际使用的外部组件：版本、许可证、用途，以及本项目自己写的部分。
+本文件记录项目实际使用的外部组件：版本、许可证、用途，以及本项目自己写的部分。
 
 ## 关于"六项目审查"的边界
 
@@ -26,12 +26,14 @@
 | mcp | 1.30.0 | MIT | FastMCP stdio 服务 |
 | python-docx | 1.2.0 | MIT | DOCX 解析（含嵌套表格、文档顺序） |
 | openpyxl | 3.1.5 | MIT | XLSX 解析（公式与缓存值、sheet 元数据） |
+| pypdf | 7.1.1 | BSD-3-Clause | 卷宗装订 PDF 合并、分项按页裁切与标准元数据写入 |
 | pypdfium2 | 5.15.2 | BSD-3-Clause / Apache-2.0 / 依赖各自许可 | PDF 文本层与页面渲染（OCR 前的位图） |
+| lxml | 6.1.3 | BSD-3-Clause | DOCX `docProps/core.xml` 与 `app.xml` 标准元数据读写（`python-docx` 依赖） |
 | pillow | 13.0.0 | MIT-CMU | 图片读取、多帧 TIFF、图像尺寸限制 |
 | rapidocr-onnxruntime | 1.4.4 | Apache-2.0 | 本地 OCR 引擎（PP-OCRv4 模型） |
 | onnxruntime | 1.31.1 | MIT | rapidocr 的推理后端（传递依赖） |
 | pytest | 8.4.1 | MIT | 测试（dev） |
-| reportlab | 5.1.0 | BSD | 测试中生成合成 PDF（dev） |
+| reportlab | 5.1.0 | BSD | 法院标准合订卷宗 PDF 排版与测试样本生成 |
 
 OCR 模型文件（`det.onnx`、`rec.onnx`、`cls.onnx`）由 `scripts/install_ocr_models.py` 从已安装的 `rapidocr_onnxruntime` 包内复制到 `var/models/rapidocr/`，并写入 SHA-256 清单。模型来自 PP-OCRv4（Apache-2.0）。运行时**绝不下载**：清单校验失败即抛 `dependency_missing`。
 
@@ -56,9 +58,44 @@ OCR 模型文件（`det.onnx`、`rec.onnx`、`cls.onnx`）由 `scripts/install_o
 - 体积（Vite 生产构建，gzip）：主包 89.36 KB **不变**；进度页懒加载 chunk 74.23 KB；elk 布局 chunk 448.29 KB，仅在打开图形视图时加载一次，Worker 与主线程回退共享同一 chunk。
 - Chromium 实测通过（布局、嵌套、关系边、交互）；Safari 与真实中文输入法待承办人验证。elkjs 为双许可，本项目按 EPL-2.0 使用；若后续分发方式变化需复核许可兼容性。
 
+## 仓库内第一方独立包
+
+下列包由本项目自行维护，位于仓库 `packages/` 下，以 `hatchling` 构建、版本独立演进；
+`backend/pyproject.toml` 通过 `[tool.uv.sources]` 以可编辑路径引用它们，因此
+`cd backend && uv sync --locked` 仍是唯一安装入口，`backend/.venv` 布局不变。它们
+不是第三方依赖，但会出现在 `backend/pyproject.toml` 的 `dependencies` 中，故在此登记。
+
+| 包 | 版本 | 许可证 | 用途 | 依赖边界 |
+|---|---|---|---|---|
+| plainfolio-dossier | 0.1.0 | Apache-2.0 | 法院自动装卷渲染内核（A4 排版、封面/动态页码目录/分隔页/连续页码、DOCX+CSV 目录、网上立案分项 PDF、ZIP 打包）、卷宗清单（JSON/CSV）生成与只读预检、方案 A 文件访问围栏、CLI 与 stdio MCP | 仅 `pypdf`、`pypdfium2`、`reportlab`、`python-docx`、`pillow`、`pydantic`、`mcp`；**不依赖** `sqlalchemy`、`psycopg`、`fastapi`、`rapidocr-onnxruntime`、`alembic`、`uvicorn` |
+| plainfolio-parse | 0.1.0 | Apache-2.0 | 零数据库离线阅卷解析内核（TXT/DOCX/XLSX/PDF/图片逐单元解析、PDF 原生文字质量启发式与逐页 OCR、精确金额分币种与日期提取、强指纹跨文件碰撞排查、表格列预览、Markdown 导出）、方案 A 文件访问围栏、CLI 与 stdio MCP | 仅 `pypdfium2`、`python-docx`、`openpyxl`、`pillow`、`pydantic`、`mcp`；OCR 走可选组 `[ocr]`（`rapidocr-onnxruntime`）；**不依赖** `sqlalchemy`、`psycopg`、`fastapi`、`alembic`、`uvicorn` |
+
+- 来源与许可：全部为本项目自写代码，未从其他仓库复制整段实现；随仓库 `LICENSE` 以
+  Apache-2.0 分发。
+- 独立使用：`pip install ./packages/plainfolio-dossier` 即可获得 `plainfolio-dossier`
+  与 `plainfolio-dossier-mcp` 两个入口，不需要数据库与工作台后端。
+- 分发形态：仓库内还提供零代码依赖的 Agent 插件 `plugins/plainfolio-dossier`
+  （`plugin.json` + `mcp.json` + 便携启动器 + 办案 Skill），并登记在
+  `.agents/plugins/marketplace.json`。
+- 兼容边界：工作台只使用其公开入口 `build_dossier`（经由
+  `legal_workbench/dossier_export.py` 薄适配层注入受管存储的路径解析与 SHA-256 校验），
+  不引用内部私有实现。
+- `plainfolio-parse` 独立使用：`pip install ./packages/plainfolio-parse` 即可获得
+  `plainfolio-parse` 与 `plainfolio-parse-mcp` 两个入口；OCR 是可选组
+  `plainfolio-parse[ocr]`，核心安装不拖 onnxruntime 与识别模型。
+- `plainfolio-parse` 分发形态：Agent 插件 `plugins/plainfolio-parse`
+  （`plugin.json` + `mcp.json` + 便携启动器 + 办案 Skill），登记在
+  `.agents/plugins/marketplace.json`。
+- `plainfolio-parse` 兼容边界：工作台解析链路（`legal_workbench/textnorm.py`、
+  `parsing/*`、`search.py` 的精确值提取、`graph_assist.py` 的强指纹与机构提取、
+  `table_graph_import.py` 的表格读取与取值解析）全部改为薄适配层——
+  `Settings` → `ParseConfig`，`ParseError` → `WorkbenchError(ErrorCode.*)`
+  且消息与细节原样保留；缺 OCR 依赖/模型按 `details.reason == "ocr_unavailable"`
+  映射回既有的 `dependency_missing`。包内私有实现不被工作台导入。
+
 ## 本项目自行编写
 
-除上表所列库之外，`backend/src/legal_workbench/`、`backend/tests/`、`backend/migrations/`、`frontend/src/`、`scripts/` 均为本项目编写的代码，没有从其他仓库复制整段实现。
+除上表所列库之外，`backend/src/legal_workbench/`、`backend/tests/`、`backend/migrations/`、`frontend/src/`、`scripts/`、`packages/plainfolio-dossier/`、`packages/plainfolio-parse/` 均为本项目编写的代码，没有从其他仓库复制整段实现。
 
 几个容易误判为"复用"的部分，实际是自写：
 

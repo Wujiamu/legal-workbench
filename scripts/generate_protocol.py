@@ -16,6 +16,8 @@ OPERATIONS = [
     ('dashboard_deadlines', 'get', '/api/v1/dashboard/deadlines',
      'DashboardDeadlinesInput', 'DashboardDeadlinesOutput'),
     ('get_case', 'get', '/api/v1/cases/{case_id}', 'CaseInput', 'CaseOverview'),
+    # 模块开关：前端据此隐藏页签并跳过必然 404 的请求。
+    ('list_modules', 'get', '/api/v1/modules', 'ModulesQuery', 'ModulesOutput'),
     ('update_case_metadata', 'patch', '/api/v1/cases/{case_id}/metadata', 'CaseMetadataInput', 'CaseOverview'),
     ('update_schedule', 'patch', '/api/v1/cases/{case_id}/schedule', 'CaseScheduleInput', 'CaseOverview'),
     ('list_annotations', 'get', '/api/v1/cases/{case_id}/annotations', 'ListAnnotationsInput', 'ListAnnotationsOutput'),

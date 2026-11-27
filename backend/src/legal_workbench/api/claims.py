@@ -23,10 +23,11 @@ from ..schemas import (
     ClaimSnapshot, ReorderClaimGroupInput, ReorderClaimItemInput,
     UpdateClaimGroupInput, UpdateClaimItemInput,
 )
-from .deps import Guarded, get_db
+from .deps import Guarded, get_db, require_module
 from .ids import uuid_of
 
-router = APIRouter(prefix="/api/v1", tags=["claims"], dependencies=[Guarded])
+router = APIRouter(prefix="/api/v1", tags=["claims"],
+                   dependencies=[Guarded, Depends(require_module("claims"))])
 
 ACTOR = "human"
 ENTRY = "local-web"

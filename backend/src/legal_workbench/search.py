@@ -9,6 +9,7 @@ import uuid
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from plainfolio_parse import exact_values as exact_values_core
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -22,29 +23,6 @@ from .textnorm import normalize_with_map, original_index
 
 CONTEXT_CHARS = 80
 _WHITESPACE = re.compile(r"\s+")
-_AMOUNT_PREFIX = {"USD": "USD", "美元": "USD", "CNY": "CNY", "RMB": "CNY", "人民币": "CNY"}
-_AMOUNT_UNIT = {"万元": Decimal(10000), "万": Decimal(10000), "元": Decimal(1), "美元": Decimal(1)}
-_AMOUNT_RE = re.compile(
-    r"(?<![\dA-Za-z])"
-    r"(?:(USD|CNY|RMB|人民币|美元)\s*)?"
-    r"(\d[\d,]*(?:\.\d{1,6})?)"
-    r"\s*(万元|万|元|美元)?"
-    r"(?![\d])"
-)
-_DATE_RE = re.compile(r"(?<!\d)(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?(?!\d)")
-_CELL_LINE_RE = re.compile(r"^([A-Z]{1,3})(\d+):[ \t]*(.+?)[ \t]*$", re.MULTILINE)
-_TABULAR_NUM_RE = re.compile(r"^(?:.*=>[ \t]*)?(\d[\d,]*(?:\.\d{1,6})?)$")
-_TABULAR_CURRENCIES = {
-    "CNY": "CNY", "RMB": "CNY", "人民币": "CNY",
-    "USD": "USD", "美元": "USD", "美金": "USD",
-    "EUR": "EUR", "欧元": "EUR",
-    "HKD": "HKD", "港币": "HKD", "港元": "HKD",
-    "JPY": "JPY", "日元": "JPY",
-    "GBP": "GBP", "英镑": "GBP",
-}
-_IDENTIFIER_RE = re.compile(
-    r"(?<![A-Za-z0-9_-])(?:[A-Za-z]+[-_/]?\d+[A-Za-z0-9\-_/]*|\d{6,})(?![A-Za-z0-9_-])"
-)
 
 
 def _escape_like(value: str) -> str:
@@ -539,119 +517,30 @@ def _coverage_for_version(session: Session, version: models.FileVersion) -> Cove
 
 
 # ---- exact value extraction -------------------------------------------------
-
-def _overlaps(spans: list[tuple[int, int]], start: int, end: int) -> bool:
-    return any(start < existing_end and end > existing_start
-               for existing_start, existing_end in spans)
-
+#
+# 提取规则（日期 / 分币种金额 / 表格单元格配对 / 编号）整体在零数据库独立包
+# ``plainfolio_parse.exact_values``；本模块只负责把命中结果落成 ``ExactValue`` 行，
+# 以保证检索与"精确值"面板在独立包与工作台之间口径完全一致。
 
 def extract_exact_values(session: Session, segment: models.Segment) -> None:
-    """Extract identifiers, amounts and dates with original-text spans."""
-    text = segment.text
-    spans: list[tuple[int, int]] = []
-    values: list[models.ExactValue] = []
-
-    def add(kind: str, raw: str, start: int, end: int, canonical: dict,
-            amount: Decimal | None = None, currency: str | None = None) -> None:
-        values.append(models.ExactValue(
-            id=uuid.uuid4(), case_id=segment.case_id, segment_id=segment.id, kind=kind,
-            raw_text=raw, canonical_value=canonical, amount_value=amount, currency=currency,
-            span={"start": start, "end": end},
-        ))
-        spans.append((start, end))
-
-    for match in _DATE_RE.finditer(text):
-        try:
-            iso = date(int(match.group(1)), int(match.group(2)), int(match.group(3))).isoformat()
-        except ValueError:
-            continue
-        if not _overlaps(spans, match.start(), match.end()):
-            add("date", match.group(0), match.start(), match.end(), {"date": iso})
-
-    for match in _AMOUNT_RE.finditer(text):
-        prefix, number, unit = match.group(1), match.group(2), match.group(3)
-        if not prefix and not unit:
-            continue
-        try:
-            amount = Decimal(number.replace(",", ""))
-        except InvalidOperation:
-            continue
-        if unit in ("万", "万元"):
-            amount *= Decimal(10000)
-        currency = _AMOUNT_PREFIX.get(prefix or "")
-        if currency is None and (unit in ("元", "万", "万元")):
-            currency = "CNY"
-        if unit == "美元" or prefix == "美元":
-            currency = "USD"
-        if currency is None:
-            continue
-        if _overlaps(spans, match.start(), match.end()):
-            continue
-        add("amount", match.group(0).strip(), match.start(), match.end(),
-            {"value": str(amount), "currency": currency}, amount=amount, currency=currency)
-
-    _extract_tabular_cell_amounts(text, spans, add)
-
-    for match in _IDENTIFIER_RE.finditer(text):
-        if _overlaps(spans, match.start(), match.end()):
-            continue
-        add("identifier", match.group(0), match.start(), match.end(),
-            {"value": match.group(0)})
-
+    """Extract dates, currency amounts and identifiers with original-text spans."""
+    hits = exact_values_core.extract_exact_values(segment.text)
+    values = [
+        models.ExactValue(
+            id=uuid.uuid4(), case_id=segment.case_id, segment_id=segment.id, kind=hit.kind,
+            raw_text=hit.raw_text, canonical_value=hit.canonical,
+            amount_value=hit.amount, currency=hit.currency,
+            span={"start": hit.start, "end": hit.end},
+        )
+        for hit in hits
+    ]
     for value in values:
         session.add(value)
     if values:
         session.flush()
 
 
-def _parse_tabular_currency(cell_val: str) -> str | None:
-    text = cell_val.strip()
-    if "=>" in text:
-        text = text.rsplit("=>", 1)[-1].strip()
-    return _TABULAR_CURRENCIES.get(text.upper()) or _TABULAR_CURRENCIES.get(text)
-
-
-def _extract_tabular_cell_amounts(text: str, spans: list[tuple[int, int]], add) -> None:
-    """Pair each currency spreadsheet cell with at most one adjacent numeric cell on the same row."""
-    cells = list(_CELL_LINE_RE.finditer(text))
-    if len(cells) < 2:
-        return
-    used_cell_indices: set[int] = set()
-    for c_idx, cell_match in enumerate(cells):
-        currency = _parse_tabular_currency(cell_match.group(3))
-        if currency is None:
-            continue
-        row_id = cell_match.group(2)
-        candidates: list[tuple[tuple[int, int, int], int, re.Match[str], re.Match[str]]] = []
-        # Check left (amount | currency) first, then right (currency | amount), preferring decimal/comma format.
-        for side_rank, n_idx in enumerate((c_idx - 1, c_idx + 1)):
-            if not (0 <= n_idx < len(cells)) or n_idx in used_cell_indices:
-                continue
-            neighbor = cells[n_idx]
-            if neighbor.group(2) != row_id:
-                continue
-            num_match = _TABULAR_NUM_RE.fullmatch(neighbor.group(3))
-            if num_match is None:
-                continue
-            raw_num = num_match.group(1)
-            num_start = neighbor.start(3) + num_match.start(1)
-            num_end = neighbor.start(3) + num_match.end(1)
-            if _overlaps(spans, num_start, num_end):
-                continue
-            format_score = 0 if ("." in raw_num or "," in raw_num) else 1
-            year_penalty = 1 if (format_score == 1 and len(raw_num) == 4 and 1900 <= int(raw_num) <= 2100) else 0
-            candidates.append(((format_score, year_penalty, side_rank), n_idx, neighbor, num_match))
-        if not candidates:
-            continue
-        candidates.sort(key=lambda item: item[0])
-        _, chosen_idx, chosen_cell, chosen_num = candidates[0]
-        raw_num = chosen_num.group(1)
-        num_start = chosen_cell.start(3) + chosen_num.start(1)
-        num_end = chosen_cell.start(3) + chosen_num.end(1)
-        try:
-            amount = Decimal(raw_num.replace(",", ""))
-        except InvalidOperation:
-            continue
-        used_cell_indices.add(chosen_idx)
-        add("amount", raw_num, num_start, num_end,
-            {"value": str(amount), "currency": currency}, amount=amount, currency=currency)
+# 保留原有私有名字：既有测试直接引用 ``search._parse_tabular_currency``。
+_parse_tabular_currency = exact_values_core.parse_tabular_currency
+_extract_tabular_cell_amounts = exact_values_core.extract_tabular_cell_amounts
+_overlaps = exact_values_core._overlaps

@@ -26,12 +26,12 @@ from ..schemas import (
     UpdateEvidenceGroupInput, UpdateEvidenceItemInput,
 )
 from ..storage import Storage
-from .deps import Guarded, get_db, get_storage
+from .deps import Guarded, get_db, get_storage, require_module
 from .files import _content_disposition
 from .ids import uuid_of
 
 router = APIRouter(prefix="/api/v1/cases/{case_id}", tags=["evidence"],
-                   dependencies=[Guarded])
+                   dependencies=[Guarded, Depends(require_module("evidence"))])
 
 ACTOR = "human"
 ENTRY = "local-web"

@@ -36,11 +36,11 @@
 | `graph.py` | 案件主体、别名、关系及出处，具名图和布局，冻结快照、同意记录及关系图变更复核 |
 | `graph_rules.py` | 主体和关系类型、关系可信状态、快照阶段、同意渠道以及 Agent 命令范围 |
 | `evidence_catalog.py` | 证据目录分组、条目与材料页码绑定，合规导入、复核、现行编号解析 |
-| `dossier_export.py` | 按中国法院纸质装订与电子立案标准生成双场景证据卷宗 ZIP（`00_证据合订卷宗.pdf`、`01_证据目录.docx/.csv`、`02_分项证据材料/*`） |
+| `dossier_export.py` | 自动装卷的工作台适配层：共享锁内取案件/证据目录/存储快照并 `rollback` 释放锁，再以 `Storage.verify` + `managed_path` 作为 `path_resolver` 调用零数据库独立包 `plainfolio_dossier.build_dossier`，产出双场景证据卷宗 ZIP（`00_证据合订卷宗.pdf`、`01_证据目录.docx/.csv`、`02_分项证据材料/*`）；排版内核在 `packages/plainfolio-dossier` |
 | `claims.py` | 诉请金额分组、项目及同案出处，按币种汇总整数分和抵扣，记录可复核变更 |
 | `chart_export.py` | 跨图表“一源三态”（`working`/`client`/`court`）引用索引附表生成、硬门禁预检 `preflight_chart_export` 与只读复核审计包 `build_chart_audit_bundle` |
-| `graph_assist.py` | 只读关系图程序化助手：双主体全案共现、片段主体/精确值匹配、材料覆盖健康矩阵、孤儿机构差集、强指纹碰撞、候选主体消歧提取 |
-| `table_graph_import.py` | 通用 XLSX/CSV 列映射预览、上传解析、编译与幂等入图提案（`Decimal` 转整数分、`skipped_rows` 异常报告） |
+| `graph_assist.py` | 只读关系图程序化助手：双主体全案共现、片段主体/精确值匹配、材料覆盖健康矩阵、孤儿机构差集、强指纹碰撞、候选主体消歧提取（强指纹与机构提取纯函数复用 `plainfolio_parse.identifiers`） |
+| `table_graph_import.py` | 通用 XLSX/CSV 列映射预览、上传解析、编译与幂等入图提案（`Decimal` 转整数分、`skipped_rows` 异常报告；表格读取与取值解析复用 `plainfolio_parse.tables`） |
 | `domain_changes.py` | 关系图、证据目录和诉请金额共享的域序号事务、变更差异、待确认记录与复核状态 |
 | `time_entries.py` | 案件工时开始、停止、补录、软删除与日汇总，跨日切段及 15 分钟计量 |
 | `config.py` | 读取 `.env` 与环境变量；`Settings` 中所有凭据字段 `repr=False` |
@@ -52,8 +52,8 @@
 | `imports.py` | 导入批次、逐项状态机、上传批次、幂等 `request_key` |
 | `materials.py` | 分类/显示名 CAS、工作副本、版本登记（同内容复用 `StoredObject`） |
 | `jobs.py` / `worker.py` | 任务队列、`FOR UPDATE SKIP LOCKED` 领取、advisory lock 保证单 worker |
-| `parsing/` | TXT/DOCX/XLSX/PDF/图片解析、本地 RapidOCR、逐 unit checkpoint、coverage 发布 |
-| `search.py` | literal/identifier/amount/date 四种模式；金额与日期命中只来自 `ExactValue` |
+| `parsing/` | 解析链薄适配层（`adapter.py` 将 `Settings` → `ParseConfig`、`ParseError` → `WorkbenchError`，缺 OCR 依赖/模型按 `ocr_unavailable` 映射 `dependency_missing`）；TXT/DOCX/XLSX/PDF/图片解析与本地 RapidOCR 内核在 `packages/plainfolio-parse`；工作台侧负责逐 unit checkpoint 与 coverage 发布 |
+| `search.py` | literal/identifier/amount/date 四种模式；金额与日期命中只来自 `ExactValue`（精确值提取与表格币种解析复用 `plainfolio_parse.exact_values`，归一化复用 `plainfolio_parse.textnorm`） |
 | `analysis.py` | 不可变分析版本、`source_refs` 同案校验、审核状态 |
 | `coverage.py` | 覆盖统计：把"从未解析"与"解析失败/不支持"分开报告 |
 | `api/` | 路由、请求守卫（本机 Host 与同源 Origin）、文件响应头 |
@@ -110,7 +110,7 @@ Agent 通过 CLI 或 MCP 调用，进程在本机运行，读的是同一套数�
 
 ## 支持范围
 
-- 分发形态：源码态（现有方式）与桌面安装包（macOS `.dmg` / Windows `.exe`）。打包工程已实现并通过干跑校验，**未在真机构建、签名或安装**，实机清单见 [PACKAGING.md](PACKAGING.md)。
+- 分发形态：源码态（现有方式）与桌面安装包（macOS `.dmg` / Windows `.exe`）。打包构建与验收现状见 [NEXT_STEPS.md](NEXT_STEPS.md)，打包架构与自检清单见 [PACKAGING.md](PACKAGING.md)。
 - 平台：macOS（Apple Silicon 已实机验证）；Windows 10/11 已完成跨平台代码适配、桌面与生命周期启动器（`法律工作台.bat` / `scripts/lwb.cmd`）、线程版 OCR 超时保护及模拟单测，待在真实 Windows 宿主机按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 执行实机验收；Linux 未验证。
 - 规模：单机单用户。实测 1000 文件 / 10000 页 / 33100 段落 / 120305 个精确值，索引 128 秒，检索 P95 415ms（单字扫描 545ms）。
 - 并发：单 worker 串行处理；多客户端可并发读，写走 CAS 与数据库锁。

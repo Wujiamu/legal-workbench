@@ -16,11 +16,13 @@ there is no grant/unlock/allow tool, by design.
 """
 from __future__ import annotations
 
+import argparse
 import functools
 import inspect
 import logging
 import sys
 import uuid
+from collections.abc import Iterable
 from typing import Any, Callable, Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -30,6 +32,7 @@ from . import (agent_access, analysis, audit, cases, imports, jobs, materials, p
 from .config import load_settings
 from .db import get_session_factory
 from .errors import ErrorCode, WorkbenchError
+from .modules import ALL_MODULES, parse_enabled_modules
 from .schemas import (CreateAnnotationInput, ListAnnotationsInput, ReviewStatus,
                       SearchMode, SearchScope, StatementKind, StrictCents,
                       AddNodeInput, AddRelationInput, InsertFragmentInput, LinkNodeInput,
@@ -47,6 +50,78 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING,
 logger = logging.getLogger("legal_workbench.mcp")
 
 server = FastMCP("legal-workbench")
+
+# --- 工具归属（模块裁剪的唯一真相源）----------------------------------------
+# 键是工具函数的 Python 名（注册名除 export-chart-audit-bundle 外与之相同）；
+# 值是"启用其中任一模块即注册"的模块集合。 ``build_server`` 与
+# ``tests/test_modular_phase1.py`` 都以这张表为准，新增工具必须在此登记，否则
+# 裁剪后的服务会静默少一个工具。
+TOOL_MODULES: dict[str, tuple[str, ...]] = {
+    # core：材料、检索、出处与访问策略——任何裁剪都必须保留。
+    "get_access_policy": ("core",),
+    "create_case": ("core",),
+    "list_cases": ("core",),
+    "import_materials": ("core",),
+    "list_materials": ("core",),
+    "update_classification": ("core",),
+    "create_working_copy": ("core",),
+    "register_file_version": ("core",),
+    "search_case": ("core",),
+    "read_source": ("core",),
+    "get_job_status": ("core",),
+    "get_index_status": ("core",),
+    # notes：标注与分析版本。
+    "annotate_file": ("notes",),
+    "list_annotations": ("notes",),
+    "save_analysis": ("notes",),
+    "review_analysis": ("notes",),
+    "get_analysis_version": ("notes",),
+    # progress：办案进度读写（确认/撤回仅人工入口）。
+    "get_progress": ("progress",),
+    "get_progress_rules": ("progress",),
+    "progress_add_node": ("progress",),
+    "progress_update_node": ("progress",),
+    "progress_set_active_stage": ("progress",),
+    "progress_move_node": ("progress",),
+    "progress_insert_fragment": ("progress",),
+    "progress_remove_node": ("progress",),
+    "progress_add_relation": ("progress",),
+    "progress_link_material": ("progress",),
+    "progress_link_analysis": ("progress",),
+    "progress_link_annotation": ("progress",),
+    "progress_remove_relation": ("progress",),
+    "progress_unlink": ("progress",),
+    # graph：主体关系图（快照冻结/恢复与客户同意不在此暴露）。
+    "get_graph": ("graph",),
+    "get_graph_rules": ("graph",),
+    "get_graph_snapshot": ("graph",),
+    "graph_removal_impact": ("graph",),
+    "graph_add_entity": ("graph",),
+    "graph_update_entity": ("graph",),
+    "graph_add_alias": ("graph",),
+    "graph_add_relation": ("graph",),
+    "graph_update_relation": ("graph",),
+    "graph_add_source": ("graph",),
+    "graph_create_graph": ("graph",),
+    "graph_update_graph": ("graph",),
+    "graph_add_to_graph": ("graph",),
+    # evidence：证据目录。
+    "get_evidence_catalog": ("evidence",),
+    "evidence_add_group": ("evidence",),
+    "evidence_add_item": ("evidence",),
+    "evidence_update_item": ("evidence",),
+    "evidence_add_binding": ("evidence",),
+    "evidence_import_catalog": ("evidence",),
+    # claims：诉请金额（确认/撤回仅人工入口）。
+    "get_claims": ("claims",),
+    "claim_amount_candidates": ("claims",),
+    "claim_add_group": ("claims",),
+    "claim_update_group": ("claims",),
+    "claim_add_item": ("claims",),
+    "claim_update_item": ("claims",),
+    # 一源两图：关系图与诉请金额任一启用即可导出审计包。
+    "export_chart_audit_bundle": ("graph", "claims"),
+}
 
 
 def _storage() -> Storage:
@@ -99,10 +174,10 @@ def _case_guard(fn: Callable[..., Any]) -> Callable[..., Any]:
     return guarded
 
 
-def _fence_audit() -> list[str]:
+def _fence_audit(target_server: FastMCP = server) -> list[str]:
     """Names of registered tools that take ``case_id`` but carry no fence."""
     unguarded: list[str] = []
-    for tool in server._tool_manager.list_tools():  # noqa: SLF001 - the only listing API
+    for tool in target_server._tool_manager.list_tools():  # noqa: SLF001 - the only listing API
         properties = (tool.parameters or {}).get("properties") or {}
         if "case_id" not in properties:
             continue
@@ -111,13 +186,13 @@ def _fence_audit() -> list[str]:
     return unguarded
 
 
-def _enforce_case_fence() -> None:
+def _enforce_case_fence(target_server: FastMCP = server) -> None:
     """Fail the process at import time if any case tool skipped the fence.
 
     A missing guard is a silent data leak, not a style problem, so this is a
     startup failure rather than a warning in a log nobody reads.
     """
-    unguarded = _fence_audit()
+    unguarded = _fence_audit(target_server)
     if unguarded:
         raise RuntimeError(
             "MCP 访问围栏缺失：以下工具带 case_id 却未加 @_case_guard："
@@ -356,15 +431,55 @@ def get_access_policy() -> dict[str, Any]:
     return agent_access.policy_summary()
 
 
-def main() -> None:
+def build_server(enabled_modules: Iterable[str] | None = None) -> FastMCP:
+    """A stdio server exposing only the tools of the enabled modules.
+
+    The default (all modules) returns the module-level ``server`` unchanged, so
+    an existing client sees byte-identical tool definitions.  A trimmed build
+    registers the *same* decorated functions — the ``@_case_guard`` wrapper is
+    what gets registered, so the fence travels with the tool — under their
+    original names, and re-runs the startup audit on the new server before it is
+    handed back.
+
+    ``TOOL_MODULES`` is the only source of membership; a tool missing from it
+    raises ``KeyError`` here rather than silently disappearing from a trimmed
+    build.
+    """
+    enabled = ALL_MODULES if enabled_modules is None else tuple(enabled_modules)
+    if set(ALL_MODULES) <= set(enabled):
+        return server
+    narrowed = FastMCP("legal-workbench")
+    for tool in server._tool_manager.list_tools():  # noqa: SLF001 - the only listing API
+        allowed = TOOL_MODULES[tool.fn.__name__]
+        if not any(module in enabled for module in allowed):
+            continue
+        narrowed.add_tool(tool.fn, name=tool.name, description=tool.description)
+    _enforce_case_fence(narrowed)
+    return narrowed
+
+
+def main(argv: list[str] | None = None) -> None:
     """Run the stdio MCP server.
 
     The MCP server is a single local process serving one caller: attribute the
     whole stdio session to it rather than threading an actor through 14 tools.
     stdout belongs to the protocol; every diagnostic already goes to stderr.
+
+    ``--modules`` trims the exposed tool set for this process only; without it
+    the configured ``LWB_MCP_MODULES`` (defaulting to ``LWB_ENABLED_MODULES``)
+    decides, and an all-module build behaves exactly as before.
     """
+    parser = argparse.ArgumentParser(prog="legal_workbench.mcp_server",
+                                     description="素章 MCP 服务（stdio）")
+    parser.add_argument("--modules", default=None, metavar="LIST",
+                        help="逗号分隔的模块名；缺省读 LWB_MCP_MODULES，再缺省为全部")
+    args, _unknown = parser.parse_known_args(argv)
+    if args.modules:
+        modules = parse_enabled_modules(args.modules)
+    else:
+        modules = load_settings().mcp_modules
     audit.set_context(actor="mcp", request_id=uuid.uuid4())
-    server.run(transport="stdio")
+    build_server(modules).run(transport="stdio")
 
 
 # --- 办案进度（actor=agent, entry=mcp）--------------------------------------

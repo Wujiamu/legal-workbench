@@ -1,6 +1,6 @@
 # 后续步骤与已知限制
 
-> **L0 调度总台**：新接手 Agent 与 [AGENTS.md](../AGENTS.md) 同读本节，即可对齐本机真实基线、活跃变更与待办池。最近更新：2026-11-25。
+> **L0 调度总台**：新接手 Agent 与 [AGENTS.md](../AGENTS.md) 同读本节，即可对齐本机真实基线、活跃变更与待办池。最近更新：2026-11-27。
 
 ## 当前运行基线与变更总表
 
@@ -8,10 +8,10 @@
 |---|---|
 | 正式运行基线 | `v0.1.0` + `0009_case_metadata`（2026-11-24：素章 · PlainFolio 品牌重塑与五套实时主题切换、首页案件元信息、筛选排序、自动装卷导出及 README 面向律师重写；本机 `127.0.0.1:8765` 库已迁移） |
 | 最新升级前备份 | `var/backups/p6-20261124-0009/`（`complete: true`，`0008_claim_amounts`，含已校验库 dump 与 13 份受管文件） |
-| 最新全量验收 | 源码基线最新后端全量 **792 passed, 1 skipped**（2026-11-25 真实 PG18 全量，唯一 skip 为真 Windows 专属 `test_real_windows_ntfs_junction_rejected`；本轮受影响 7 组核心集 **180 passed, 1 skipped**）＋前端 **414 项** / 58 文件 + `tsc --noEmit && vite build` + `0009` 正式上线前双路独立代码审查全清复测通过，见 [测试报告](TEST_REPORT.md) |
-| 活跃变更单（已实现，待验收／未封板） | [Agent 访问硬围栏与授权收紧](changes/20261125-Agent访问硬围栏与授权收紧.md)（已实现待实机验收，后端 180 passed / 1 skipped，含全工具反射审计与真实 stdio 握手；未在真实客户端跑会话）· [通用 Agent 插件包](changes/20261124-通用Agent插件包.md)（已实现待验收，未在 Codex / DSH 客户端实机安装）· [桌面安装包打包工程](changes/20261124-桌面安装包打包工程.md)（已实现待实机验收，未真机构建任何安装包） |
+| 最新全量验收 | 源码基线 2026-11-27 全量后端＋独立包 **877 passed, 1 skipped**（唯一 skip 为真 Windows 专属 `test_real_windows_ntfs_junction_rejected`；随后修复 `modules.py` 裸 Python 导入后受影响 10 个测试集复测 **238 passed**，含 `test_modular_phase1.py` 29 项）＋前端 **421 项** / 59 文件（`tsc --noEmit && vite build` 通过）；另已完成 `plainfolio-dossier` 与 `plainfolio-parse` 零数据库隔离安装验收、PyInstaller `6.22.3` 冻结态运行烟测、Codex 隔离插件市场安装 4 插件及 Chromium 浏览器模块开关实测，见 [测试报告](TEST_REPORT.md) |
+| 活跃变更单（已实现，待验收／未封板） | [Agent 访问硬围栏与授权收紧](changes/20261125-Agent访问硬围栏与授权收紧.md)（已实现待实机验收，后端 180 passed / 1 skipped，含全工具反射审计与真实 stdio 握手；未在真实客户端跑会话）· [通用 Agent 插件包](changes/20261124-通用Agent插件包.md)（已实现待验收，未在 Codex / DSH 客户端实机安装）· [桌面安装包打包工程](changes/20261124-桌面安装包打包工程.md)（已通过 GitHub Actions 云端构建 `.exe`/`.dmg` 与冻结烟测，macOS 本机已完成 `.dmg` 校验/动态库可迁移性与冻结执行测试；待干净 macOS 图形化冷启动、Windows 真机安装及签名公证） |
 | 长期决策与远期路线（未授权） | 跨图契约：[图表程序化与对外引用契约](decisions/20261122-图表程序化与对外引用契约.md) · 二/三期蓝图：[横向可视化与二三期图表演进路线](changes/20261122-横向可视化与二三期图表演进路线.md) |
-| 近期已封板变更单 | [素章品牌重塑与五套主题切换](changes/20261124-素章品牌重塑与五套主题切换.md)（`0009` 零迁移，已应用至本机 `127.0.0.1:8765`）· [Windows 适配](changes/20261123-Windows适配.md)（`0008` 零迁移，macOS 闭环、待真 Windows 实机核验）· [图表程序化能力与对外引用导出](changes/20261122-图表程序化能力与对外引用导出.md)（`0008` 零迁移）· [案件主体关系图](changes/20261120-案件主体关系图.md)（`0008`）· [期限时间轴与诉请金额](changes/20261120-期限时间轴与诉请金额.md)（`0008`）· [办案进度可视化](changes/20261116-办案进度可视化.md)（`0006`）· [诉讼工作台 UI 重构](changes/20261114-诉讼工作台UI重构.md)（`0004`） |
+| 近期已封板变更单 | [模块化拆分与按需分发架构](changes/20261127-模块化拆分与按需分发架构.md)（`0009` 零迁移，Phase 0–3 全闭环＋三项实机烟测通过）· [素章品牌重塑与五套主题切换](changes/20261124-素章品牌重塑与五套主题切换.md)（`0009` 零迁移，已应用至本机 `127.0.0.1:8765`）· [Windows 适配](changes/20261123-Windows适配.md)（`0008` 零迁移，macOS 闭环、待真 Windows 实机核验）· [图表程序化能力与对外引用导出](changes/20261122-图表程序化能力与对外引用导出.md)（`0008` 零迁移）· [案件主体关系图](changes/20261120-案件主体关系图.md)（`0008`）· [期限时间轴与诉请金额](changes/20261120-期限时间轴与诉请金额.md)（`0008`）· [办案进度可视化](changes/20261116-办案进度可视化.md)（`0006`）· [诉讼工作台 UI 重构](changes/20261114-诉讼工作台UI重构.md)（`0004`） |
 
 ---
 
@@ -28,7 +28,7 @@ V0.1 交付后的历史限制与持续跟踪事项如下，避免把未验证的
 | 不自动清理孤立文件 | `check-consistency` 只报告 | `repair-consistency` 不删除、不猜测归属 |
 | 恢复只能到空环境 | 不能增量或覆盖恢复 | 目标库必须无表、`DATA_ROOT` 必须为空 |
 | 实机已验证平台 | 仅 macOS 实机验证 | Windows 10/11 已完成跨平台源码适配与模拟单测，待真实 Windows 宿主机按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 实测；Linux 未测 |
-| 安装包形态 | 尚无 `.dmg` / `.exe` 安装包 | 打包工程（解耦、桌面入口、组装流水线）已实现并通过干跑校验，未在真机构建、签名或安装；见 [桌面安装包文档](PACKAGING.md) 与 [打包工程变更单](changes/20261124-桌面安装包打包工程.md) |
+| 安装包形态 | 已出未签名双端构建，待部分真机验收 | GitHub Actions Run `45628787812` 已构建并烟测通过 Windows `.exe`（~140MB）与 macOS `.dmg`（~343MB），macOS 本机已完成包体/`otool -L`/冻结执行校验；待干净 macOS 图形化冷启动、Windows 真机安装与签名公证，见 [PACKAGING.md](PACKAGING.md) 与 [打包工程变更单](changes/20261124-桌面安装包打包工程.md) |
 | DOCX 嵌入图片不识别 | 图片里的文字查不到 | 只在 `warnings` 标注部分覆盖，不静默忽略 |
 | 加密 Office 文件不支持 | 会报解析失败 | 未构造样本断言具体错误码 |
 
@@ -41,8 +41,8 @@ V0.1 交付后的历史限制与持续跟踪事项如下，避免把未验证的
 | 真实案件试用 | **未进行** | 先用虚构材料走完整流程，再逐步引入真实材料；不要拿唯一一份真实材料做首次导入 |
 | 图表程序化模块 Safari 实机验收 | **未实测（2026-11-22）** | 本轮浏览器 E2E 为内置 Chromium 驱动（760px 窄屏溢出因沙箱限制 `page.evaluate`，已用元素 `boundingBox().width` 与截图核对）；60ms Safari 输入法保护窗口由组件单测覆盖，Safari 实机交互待承办人按需验证 |
 | Windows 10/11 宿主机实机验收 | **待真机验收（2026-11-23）** | 跨平台改造、启动器与模拟单测已闭环（[Windows 适配变更单](changes/20261123-Windows适配.md)）；需在真实 Windows 10/11（NTFS）按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 实跑初始化、无黑框启动、OCR 超时、真实 Junction 与备份恢复 |
-| macOS `.dmg` 安装包实机验收 | **待实机验收（2026-11-24）** | 在干净 macOS 账户按 [PACKAGING.md](PACKAGING.md) 第 8 节执行：首次启动自动建库、单实例、退出停库、升级前备份、打包态 MCP 派发、卸载不删数据 |
-| Windows `.exe` 安装包实机验收 | **待实机验收（2026-11-24）** | 在中文 Windows 10/11 x64 普通用户账户按同一清单执行：免管理员安装、CP936 下 initdb 无乱码、覆盖升级不动 `%LOCALAPPDATA%\PlainFolio`、卸载保留数据 |
+| macOS `.dmg` 安装包实机验收 | **部分验证（2026-11-25）** | Run `45628787812` 云端构建并过冻结烟测；本机已验 SHA-256、`arm64`、`otool -L` 动态库可迁移性、冻结 `--version`/`--status`/PG18/`run-mcp.py --print-plan` 及 `adhoc` 签名现状。仍待：在干净 macOS 账户拖入 `/Applications` 后完成首次双击建库与浏览器自动打开 |
+| Windows `.exe` 安装包实机验收 | **待真机验收（2026-11-25 CI 烟测通过）** | Run `45628787812` 在 `windows-latest` 已产出 `PlainFolio-Setup-0.1.0-x64.exe` 并过冻结烟测；仍待在真实中文 Windows 10/11 x64 普通用户账户按 [PACKAGING.md](PACKAGING.md) 第 8 节验免管理员安装、CP936 无乱码、覆盖升级与卸载保留数据 |
 | Agent 插件包客户端实机验收 | **待实机验收（2026-11-24）** | 在 Codex / DSH / Claude Desktop 中真实安装 `plugins/plainfolio` 并跑通一次会话；源码态与打包态两种实例发现都要覆盖。**须同时验证门禁**：未授权时工具返回 `forbidden` 且模型停止而非绕过；授权后只服务该案；业务 Skill 的「授权前置」段落被客户端正确加载 |
 | Agent 访问硬围栏实机验收 | **待实机验收（2026-11-25）** | 后端门禁已由 `tests/test_agent_access_gate.py`（58 项，含 52 个工具的反射审计与真实 stdio 握手）与反向验证闭环。需在真机确认：①全新安装后 `var/runtime/agent-access.json` 不存在且 MCP 侧 `get_access_policy` 报 `deny_all`；②`scripts/lwb agent-grant <case_id>` 后仅该案可读，`list_cases` 只回一条；③`agent-revoke` 清空后自动回 `deny_all`；④`agent-allow-all --confirm` 的警告在终端可见、`agent-lock` 能立刻收回；⑤Windows 下 `scripts\lwb.cmd agent-*` 五个命令可用（含 UTF-8 输出与退出码）。见 [变更单](changes/20261125-Agent访问硬围栏与授权收紧.md) |
 
@@ -96,9 +96,10 @@ V0.1 交付后的历史限制与持续跟踪事项如下，避免把未验证的
 
 | 事项 | 状态 | 下一步 |
 |---|---|---|
+| [模块化拆分与按需分发架构](changes/20261127-模块化拆分与按需分发架构.md) | **已封板（2026-11-27 零迁移全量＋三项实机烟测闭环）** | Windows 宿主机与外部模型会话并入既有 Windows / 客户端待办统一验证。 |
 | [Agent 访问硬围栏与授权收紧](changes/20261125-Agent访问硬围栏与授权收紧.md) | **已实现待实机验收** | 按上方「Agent 访问硬围栏实机验收」条目在 macOS 与 Windows 真机逐项留证；随后按封板核对单刷新 L0/L1。 |
 | [DSH 专用 Cordis 插件](changes/20261125-DSH专用Cordis插件.md) | **已废弃（路线 2，2026-11-25 移除）** | 代码与目录已删除；调研结论留痕在原单，若将来重启须先回答「常驻插件是否构成未授权案件的侧信道」。 |
-| [桌面安装包打包工程](changes/20261124-桌面安装包打包工程.md) | **已实现待实机验收** | 在 macOS 与 Windows 真机构建并安装，按 [PACKAGING.md](PACKAGING.md) 第 8 节清单逐项留证；签名与公证另排。 |
+| [桌面安装包打包工程](changes/20261124-桌面安装包打包工程.md) | **已实现待实机验收（CI 构建与 macOS 包体校验通过）** | 补干净 macOS 图形化冷启动、真实 Windows 宿主机安装与卸载测试，按 [PACKAGING.md](PACKAGING.md) 第 8 节留证；签名与公证另排。 |
 | [通用 Agent 插件包](changes/20261124-通用Agent插件包.md) | **已实现待验收** | 在真实客户端安装插件包并跑通会话；随后按封板核对单刷新 L0/L1 与本文件。 |
 | [素章品牌重塑与五套主题切换](changes/20261124-素章品牌重塑与五套主题切换.md) | **已封板（2026-11-24 零迁移正式应用）** | 如需将桌面启动器文件名一并改名，后续另立小单并同步 `WINDOWS_CHECKLIST.md` 与 `test_windows_compat.py`。 |
 | [Windows 适配](changes/20261123-Windows适配.md) | **已封板（源码就绪与 macOS 全量闭环，待真 Windows 实机验收）** | 在真实 Windows 10/11（NTFS）宿主机按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 执行实机验收。 |

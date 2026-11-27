@@ -109,6 +109,12 @@ export const casesApi = {
       { case_id: caseId, expected_revision: expectedRevision }),
 };
 
+/** 模块开关（Phase 1）：本机启用了哪些可选功能面，前端据此隐藏入口。 */
+export const modulesApi = {
+  list: (signal?: AbortSignal) =>
+    api.get<Schemas['ModulesOutput']>('/api/v1/modules', signal),
+};
+
 /** 工时（P2 持久化）：计时/补录/日视图/按标题汇总。 */
 export const timeApi = {
   day: (caseId: string, workDate: string, signal?: AbortSignal) =>

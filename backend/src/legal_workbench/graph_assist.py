@@ -13,6 +13,19 @@ from sqlalchemy.orm import Session
 from . import cases, coverage, evidence_catalog, graph, graph_rules, materials, models, search
 from .errors import ErrorCode, WorkbenchError
 from .schemas import Contract, Coverage, ResolvedLabelOut, SearchScope, SourceLocation
+from plainfolio_parse.identifiers import (
+    clean_org_parts as _clean_org_parts,
+    compact_cjk as _compact_cjk,
+    extract_header_org_names as _extract_header_org_names,
+    extract_identifiers,
+    extract_org_spans as _extract_org_spans,
+    looks_like_cn_id as _looks_like_cn_id,
+    norm_key as _norm_key,
+    split_mid_connectors as _split_mid_connectors,
+    valid_uscc as _valid_uscc,
+    window_has_keyword,
+)
+
 from .textnorm import normalize_with_map, original_index
 
 _GENERIC_TERMS = frozenset({"公司", "集团", "银行", "甲方", "乙方", "丙方", "原告", "被告", "对方", "本方"})
@@ -409,9 +422,6 @@ _FIRM_SUFFIX_RE = re.compile(
     r"(?:律师事务所|会计师事务所|资产评估事务所)(?:\((?:特殊的?普通合伙|普通合伙|有限合伙)\))?$"
 )
 
-_HEADER_PARTY_ORGS_RE = re.compile(
-    r"^(?:原告|被告|第三人|申请人|被申请人|上诉人|被上诉人)\s*[:：]\s*(.+)$"
-)
 _HEADER_PARTY_ROLES_RE = re.compile(
     r"^(原告|被告|第三人|申请人|被申请人|上诉人|被上诉人|法定代表人|委托诉讼代理人)"
     r"(?:\([^()]{1,12}\))?\s*([:：\s])\s*(.+)$"
@@ -459,25 +469,6 @@ _INDUSTRY_WORDS = (
     "传媒", "置业", "地产", "能源", "环保", "医药", "健康", "金融", "服务",
     "控股", "集团",
 )
-_MULTI_BOUNDARY_RE = re.compile(
-    r"(?:法定代表人|委托诉讼代理人|委托代理人|诉讼代理人|反诉原告|反诉被告|"
-    r"被申请人|被上诉人|被执行人|申请执行人|开户银行|开户行|收款单位|付款单位|"
-    r"收款人|付款人|以下简称|原告|被告|第三人|申请人|上诉人|甲方|乙方|丙方|丁方|"
-    r"担保人|保证人|借款人|出借人|买方|卖方|转让方|受让方|发包人|承包人|出租人|承租人|"
-    r"本公司|贵公司|该公司|本案|涉案|上述|前述|关于|委托|根据|按照|依照|同意|确认|"
-    r"通知|要求|请求|支付|转入|转至|汇入|汇至|汇往|交付|起诉|诉请|简称|"
-    r"另有|还有|以及|另由|另向|另与)"
-)
-_LEADING_DATE_RE = re.compile(r"^(?:\d{4}年(?:\d{1,2}月(?:\d{1,2}日)?)?|\d{1,2}月(?:\d{1,2}日)?|\d{1,2}日)")
-_LEADING_CONNECTORS = frozenset(("与", "向", "由", "为", "及", "和", "对", "被", "给"))
-_LEADING_REGION_PREPOSITIONS = frozenset(("经", "在", "自", "从", "于", "至", "系", "即", "诉", "据", "按", "往", "把", "将", "让"))
-_MID_STRONG_SPLITTERS = frozenset(("与", "及", "被", "给"))
-_MID_CONTEXT_SPLITTERS = frozenset(("由", "向", "对"))
-_STOP_ORG_PREFIXES = frozenset({
-    "上述", "前述", "涉案", "相关", "其他", "有关", "任何", "全部", "本案", "该案",
-    "双方", "各方", "公司", "集团", "银行", "单位", "企业", "机构", "某", "该",
-    "开户", "收款", "付款", "汇款", "指定", "对方", "本方", "我方",
-})
 _NON_ALIAS_TERMS = _GENERIC_TERMS | frozenset({
     "丁方", "卖方", "买方", "出借人", "借款人", "保证人", "担保人", "发包人", "承包人",
     "转让方", "受让方", "第三人", "申请人", "被申请人", "上诉人", "被上诉人",
@@ -485,37 +476,6 @@ _NON_ALIAS_TERMS = _GENERIC_TERMS | frozenset({
     "科技公司", "贸易公司", "实业公司", "投资公司", "控股公司", "集团公司",
     "律师事务所", "会计师事务所", "资产评估事务所", "上述公司", "该公司", "本公司", "贵公司",
 })
-
-_CN_MOBILE_RE = re.compile(r"(?<!\d)(1[3-9]\d{9})(?!\d)")
-_USCC_RE = re.compile(
-    r"(?<![0-9A-Za-z])([0-9A-HJ-NPQRTUWXYa-hj-npqrtuwxy]{2}\d{6}"
-    r"[0-9A-HJ-NPQRTUWXYa-hj-npqrtuwxy]{10})(?![0-9A-Za-z])"
-)
-_BANK_ACCOUNT_RE = re.compile(r"(?<!\d)(\d{15,19})(?!\d)")
-_EMAIL_RE = re.compile(r"(?<![A-Za-z0-9._%+-])([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})")
-
-_USCC_CHARSET = "0123456789ABCDEFGHJKLMNPQRTUWXY"
-_USCC_WEIGHTS = (1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28)
-_BANK_CONTEXT_KEYWORDS = (
-    "银行", "账号", "帐号", "卡号", "开户行", "开户银行",
-    "户名", "收款账户", "付款账户", "对公账户", "账户",
-)
-_BANK_CONTEXT_RADIUS = 30
-_USCC_CONTEXT_KEYWORDS = ("信用代码", "社会信用")
-_CN_ID_NEGATIVE_KEYWORDS = ("身份证", "公民身份号码", "公民身份")
-_CN_ID_RE = re.compile(r"^\d{6}(?:19\d{2}|20\d{2})(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dX]$")
-_CN_ID_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
-_CN_ID_CHECK = "10X98765432"
-
-
-def _norm_key(value: str) -> str:
-    return re.sub(r"\s+", "", normalize_with_map(value)[0]).lower()
-
-
-def _compact_cjk(value: str) -> str:
-    norm = normalize_with_map(value)[0].strip()
-    return re.sub(r"(?<=[\u4e00-\u9fff()（）])\s+|\s+(?=[\u4e00-\u9fff()（）])", "", norm).strip()
-
 
 def _active_original_segments(
     session: Session, case_id: UUID, material_ids: list[UUID] | None = None,
@@ -825,107 +785,6 @@ def get_corpus_coverage_matrix(
 
 # --- Organization extraction helpers ----------------------------------------
 
-def _split_mid_connectors(prefix: str) -> str:
-    """Trim sentence phrases/connectors embedded at the front of an org prefix."""
-    best = 0
-    for marker in _MULTI_BOUNDARY_RE.finditer(prefix):
-        if len(prefix) - marker.end() >= 2:
-            best = max(best, marker.end())
-    if best > 0:
-        prefix = prefix[best:]
-
-    # Trim leading dates like 2025年1月1日 attached directly before org name.
-    date_match = _LEADING_DATE_RE.match(prefix)
-    if date_match and len(prefix) - date_match.end() >= 2:
-        prefix = prefix[date_match.end():]
-
-    # Split on embedded connectors when surrounding context guarantees it is a clause boundary.
-    split_pos = 0
-    for idx, ch in enumerate(prefix):
-        if idx == 0:
-            continue
-        rem = prefix[idx + 1:]
-        if len(rem) < 2:
-            continue
-        if ch in _MID_STRONG_SPLITTERS:
-            split_pos = idx + 1
-        elif ch in _MID_CONTEXT_SPLITTERS and (
-            _REGION_PREFIX_RE.match(rem) or (idx >= 2 and len(rem) >= 4)
-        ):
-            split_pos = idx + 1
-        elif ch == "和" and idx >= 2 and _REGION_PREFIX_RE.match(rem):
-            split_pos = idx + 1
-    if split_pos > 0:
-        prefix = prefix[split_pos:]
-
-    while prefix:
-        if prefix[0] in _LEADING_CONNECTORS and len(prefix) - 1 >= 2:
-            prefix = prefix[1:]
-        elif (
-            prefix[0] in _LEADING_REGION_PREPOSITIONS
-            and _REGION_PREFIX_RE.match(prefix[1:]) is not None
-            and len(prefix) - 1 >= 2
-        ):
-            prefix = prefix[1:]
-        else:
-            break
-    return prefix.strip("·&-. ")
-
-
-def _clean_org_parts(raw_prefix: str, suffix: str) -> tuple[str, str] | None:
-    prefix = _compact_cjk(raw_prefix).strip("·&-. ")
-    prefix = _split_mid_connectors(prefix)
-    if len(prefix) < 2 or prefix in _STOP_ORG_PREFIXES:
-        return None
-    full = f"{prefix}{suffix}"
-    if full in _NON_ALIAS_TERMS or len(full) < 4:
-        return None
-    return prefix, full
-
-
-def _extract_org_spans(norm_text: str) -> list[tuple[str, int, int]]:
-    """Return [(cleaned_org_name, start, end)] from normalized text."""
-    results: list[tuple[str, int, int]] = []
-    seen_spans: set[tuple[int, int]] = set()
-    for match in _ORG_INLINE_RE.finditer(norm_text):
-        cleaned = _clean_org_parts(match.group(1), match.group(2))
-        if cleaned is None:
-            continue
-        prefix, full = cleaned
-        start = match.end() - len(full)
-        end = match.end()
-        if start < match.start():
-            start = match.start()
-        if (start, end) not in seen_spans:
-            seen_spans.add((start, end))
-            results.append((full, start, end))
-    return results
-
-
-def _extract_header_org_names(raw_text: str) -> list[str]:
-    """Inspect litigation party header lines ONLY when ending with a strict org suffix."""
-    found: list[str] = []
-    for line in raw_text.splitlines():
-        norm_line = normalize_with_map(line)[0].strip()
-        match = _HEADER_PARTY_ORGS_RE.match(norm_line)
-        if not match:
-            continue
-        rest = match.group(1).strip()
-        # Take the first clause before comma/semicolon/period.
-        clause = re.split(r"[,，。;；]", rest, maxsplit=1)[0].strip()
-        compact = re.sub(r"\s+", "", clause)
-        # Strip trailing non-org annotations like (统一社会信用代码...) or (以下简称...).
-        m_inline = _ORG_INLINE_RE.match(compact)
-        if m_inline:
-            cleaned = _clean_org_parts(m_inline.group(1), m_inline.group(2))
-            if cleaned is not None and m_inline.start() == 0:
-                # Only treat as whole-party org if nothing non-parenthetical follows before clause end.
-                tail = compact[m_inline.end():]
-                if not tail or tail.startswith("("):
-                    found.append(cleaned[1])
-    return found
-
-
 def find_orphan_orgs(
     session: Session, case_id: UUID, min_mentions: int = 2,
 ) -> list[OrphanOrgCandidate]:
@@ -991,83 +850,9 @@ def find_orphan_orgs(
 
 # --- Identifier bridges (Wave 1C) -------------------------------------------
 
-def _looks_like_cn_id(code: str) -> bool:
-    upper = code.upper()
-    if not _CN_ID_RE.fullmatch(upper):
-        return False
-    total = sum(int(ch) * w for ch, w in zip(upper[:17], _CN_ID_WEIGHTS))
-    return upper[17] == _CN_ID_CHECK[total % 11]
-
-
-def _valid_uscc(code: str) -> bool:
-    if len(code) != 18:
-        return False
-    upper = code.upper()
-    try:
-        total = sum(_USCC_CHARSET.index(ch) * w for ch, w in zip(upper[:17], _USCC_WEIGHTS))
-    except ValueError:
-        return False
-    check_idx = (31 - (total % 31)) % 31
-    return upper[17] == _USCC_CHARSET[check_idx]
-
-
-def _window_has_keyword(text: str, start: int, end: int, keywords: tuple[str, ...], radius: int) -> bool:
-    ctx_before = text[max(0, start - radius):start]
-    ctx_after = text[end:min(len(text), end + radius)]
-    window = ctx_before + " " + ctx_after
-    return any(kw in window for kw in keywords)
-
-
-def _extract_identifiers_from_text(norm_text: str) -> list[tuple[IdentifierKind, str, int, int]]:
-    hits: list[tuple[IdentifierKind, str, int, int]] = []
-    seen: set[tuple[IdentifierKind, str]] = set()
-
-    bank_spans: set[tuple[int, int]] = set()
-    for match in _BANK_ACCOUNT_RE.finditer(norm_text):
-        start, end = match.start(1), match.end(1)
-        if _window_has_keyword(norm_text, start, end, _BANK_CONTEXT_KEYWORDS, _BANK_CONTEXT_RADIUS):
-            val = match.group(1)
-            bank_spans.add((start, end))
-            if ("bank_account", val) not in seen:
-                seen.add(("bank_account", val))
-                hits.append(("bank_account", val, start, end))
-
-    for match in _USCC_RE.finditer(norm_text):
-        start, end = match.start(1), match.end(1)
-        val = match.group(1).upper()
-        if not _valid_uscc(val):
-            continue
-        has_uscc_ctx = _window_has_keyword(norm_text, start, end, _USCC_CONTEXT_KEYWORDS, _BANK_CONTEXT_RADIUS)
-        # Exclude 18-digit citizen ID numbers (Mod 11-2 or explicit ID keywords) unless explicitly labeled USCC.
-        if (
-            (_looks_like_cn_id(val) or _window_has_keyword(norm_text, start, end, _CN_ID_NEGATIVE_KEYWORDS, _BANK_CONTEXT_RADIUS))
-            and not has_uscc_ctx
-        ):
-            continue
-        # An all-digit 18-char string already matched as a bank account without USCC keywords is a bank account.
-        if (
-            val.isdigit()
-            and (start, end) in bank_spans
-            and not has_uscc_ctx
-        ):
-            continue
-        if ("uscc", val) not in seen:
-            seen.add(("uscc", val))
-            hits.append(("uscc", val, start, end))
-
-    for match in _CN_MOBILE_RE.finditer(norm_text):
-        val = match.group(1)
-        if ("cn_mobile", val) not in seen:
-            seen.add(("cn_mobile", val))
-            hits.append(("cn_mobile", val, match.start(1), match.end(1)))
-
-    for match in _EMAIL_RE.finditer(norm_text):
-        val = match.group(1).lower()
-        if ("email", val) not in seen:
-            seen.add(("email", val))
-            hits.append(("email", val, match.start(1), match.end(1)))
-
-    return hits
+def _extract_identifiers_from_text(norm_text: str) -> list[tuple[str, str, int, int]]:
+    """兼容包装：规则在 ``plainfolio_parse.identifiers``，这里只把结果换成既有元组形状。"""
+    return [(hit.kind, hit.value, hit.start, hit.end) for hit in extract_identifiers(norm_text)]
 
 
 def find_identifier_bridges(session: Session, case_id: UUID) -> list[IdentifierBridge]:

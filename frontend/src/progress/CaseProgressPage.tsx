@@ -15,6 +15,7 @@ import { casesApi, materialsApi, progressApi } from '../api/endpoints';
 import type { ProgressSnapshot as ApiSnapshot } from '../api/endpoints';
 import { AppBrand, ThemeSwitcher } from '../components/BrandMark';
 import { CaseNavBar } from '../components/CaseNavBar';
+import { isModuleEnabled, useEnabledModules } from '../modules';
 import { ChangeReviewPanel } from './ChangeReviewPanel';
 import { CaseTimePanel } from './CaseTimePanel';
 import { GraphView } from './GraphView';
@@ -64,6 +65,9 @@ function CaseProgress({ caseId }: { caseId: string }) {
   const [archivedAt, setArchivedAt] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const [showTime, setShowTime] = useState(false);
+  // 工时是独立模块：关闭时不渲染入口与面板，避免必然 404 的请求。
+  const enabledModules = useEnabledModules();
+  const timeEnabled = isModuleEnabled(enabledModules, 'time');
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveError, setArchiveError] = useState('');
   const [archiveBusy, setArchiveBusy] = useState(false);
@@ -294,7 +298,9 @@ function CaseProgress({ caseId }: { caseId: string }) {
         <div className="page-heading">
           <h1>{caseTitle}</h1>
           <div className="dashboard-actions">
-            <button type="button" className="time-open-btn" onClick={() => setShowTime(true)}>工时</button>
+            {timeEnabled ? (
+              <button type="button" className="time-open-btn" onClick={() => setShowTime(true)}>工时</button>
+            ) : null}
             {archivedAt ? null : (
               <button type="button" className="archive-btn" onClick={() => { setArchiveError(''); setArchiveOpen(true); }}>
                 结案归档
@@ -480,7 +486,7 @@ function CaseProgress({ caseId }: { caseId: string }) {
           </form>
         </dialog>
       ) : null}
-      {showTime ? (
+      {showTime && timeEnabled ? (
         <dialog className="work-dialog" aria-label="工时"
           ref={(el) => { if (el && !el.open) el.showModal(); }}>
           <CaseTimePanel caseId={caseId} nodes={snapshot.nodes} readOnly={archivedAt !== null} />

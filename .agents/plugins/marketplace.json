@@ -13,6 +13,36 @@
         "source": "local",
         "path": "./plugins/plainfolio"
       }
+    },
+    {
+      "name": "plainfolio-legal-sops",
+      "version": "0.1.0",
+      "description": "独立法律方法论 Skills：非标银行流水与多表头对账单的确定性 Python 算账规程、对外关系图与诉请金额的实质复核规程。零代码、零数据库，不需要工作台即可使用。",
+      "category": "Legal",
+      "source": {
+        "source": "local",
+        "path": "./plugins/plainfolio-legal-sops"
+      }
+    },
+    {
+      "name": "plainfolio-dossier",
+      "version": "0.1.0",
+      "description": "素章（PlainFolio）法院自动装卷器独立插件：零数据库、免装工作台，用 stdio MCP 把本地材料目录装成证据合订卷宗 ZIP（A4 排版、20mm 装订线、精确页码目录、网上立案分项材料），默认目录围栏＋原件只读。",
+      "category": "Legal",
+      "source": {
+        "source": "local",
+        "path": "./plugins/plainfolio-dossier"
+      }
+    },
+    {
+      "name": "plainfolio-parse",
+      "version": "0.1.0",
+      "description": "素章（PlainFolio）离线阅卷解析器独立插件：零数据库、免装工作台，用 stdio MCP 把本地案卷材料解析成带页码/工作表锚点的结构化文本与 Obsidian Markdown，并扫描分币种金额、日期与跨文件强指纹碰撞；默认目录围栏＋原件只读。",
+      "category": "Legal",
+      "source": {
+        "source": "local",
+        "path": "./plugins/plainfolio-parse"
+      }
     }
   ]
 }

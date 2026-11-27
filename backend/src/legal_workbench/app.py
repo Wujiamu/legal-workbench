@@ -19,6 +19,8 @@ from .api.deps import guard, request_id
 from .config import load_settings, resolve_frontend_dist
 from .errors import ErrorCode, WorkbenchError
 from .logging_config import configure_logging
+from .modules import ALL_MODULES
+from .schemas import ModulesOutput
 
 configure_logging()
 logger = logging.getLogger("legal_workbench.api")
@@ -36,6 +38,19 @@ for module in (cases, materials, search, analyses, files, annotation_api, progre
 @app.get("/api/v1/health", include_in_schema=False, dependencies=[Depends(guard)])
 async def health():
     return {"app": "legal-workbench"}
+
+
+@app.get("/api/v1/modules", response_model=ModulesOutput, tags=["modules"],
+         dependencies=[Depends(guard)])
+async def list_modules() -> ModulesOutput:
+    """Which optional surfaces this installation serves (read per request).
+
+    The UI reads this once per session to hide tabs and to skip requests that
+    would only produce a 404.  It is not a security boundary: the access fence
+    still decides per case whether anything can be read at all.
+    """
+    return ModulesOutput(enabled_modules=list(load_settings().enabled_modules),
+                         all_modules=list(ALL_MODULES))
 
 
 @app.middleware("http")

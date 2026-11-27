@@ -344,6 +344,8 @@ dependencies = [
     { name = "mcp" },
     { name = "openpyxl" },
     { name = "pillow" },
+    { name = "plainfolio-dossier" },
+    { name = "plainfolio-parse", extra = ["ocr"] },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pypdf" },
@@ -368,6 +370,8 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.30.0" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pillow", specifier = ">=13.0.0" },
+    { name = "plainfolio-dossier", editable = "../packages/plainfolio-dossier" },
+    { name = "plainfolio-parse", extras = ["ocr"], editable = "../packages/plainfolio-parse" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.2.9" },
     { name = "pydantic", specifier = "==2.11.5" },
     { name = "pypdf", specifier = ">=5.0.0" },
@@ -571,6 +575,61 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/ed/1b16fb66a37e1b9e41370b93b2c614c7da761a5b2a41dc333f7af4639962/pillow-13.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:9dda0788a9932776a75d8bcc020076edc308ce2508b51f6739a45e3158b3fc42", size = 7284777, upload-time = "2026-10-16T22:16:23.393Z" },
     { url = "https://files.pythonhosted.org/packages/87/7d/8d02eba9f7ecc87f8e90f731e032cc4773802f2a843763afd0c66a535ff4/pillow-13.0.0-cp313-cp313-win_arm64.whl", hash = "sha256:40a266371ece581e5de13b6635ef78d7487824af80561b6ca27694a88c19bc0f", size = 2698826, upload-time = "2026-10-16T22:16:25.382Z" },
 ]
+
+[[package]]
+name = "plainfolio-dossier"
+version = "0.1.0"
+source = { editable = "../packages/plainfolio-dossier" }
+dependencies = [
+    { name = "mcp" },
+    { name = "pillow" },
+    { name = "pydantic" },
+    { name = "pypdf" },
+    { name = "pypdfium2" },
+    { name = "python-docx" },
+    { name = "reportlab" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mcp", specifier = ">=1.30.0,<2" },
+    { name = "pillow", specifier = ">=13.0.0" },
+    { name = "pydantic", specifier = ">=2.11.5" },
+    { name = "pypdf", specifier = ">=5.0.0" },
+    { name = "pypdfium2", specifier = ">=5.15.2" },
+    { name = "python-docx", specifier = ">=1.2.0" },
+    { name = "reportlab", specifier = ">=5.1.0" },
+]
+
+[[package]]
+name = "plainfolio-parse"
+version = "0.1.0"
+source = { editable = "../packages/plainfolio-parse" }
+dependencies = [
+    { name = "mcp" },
+    { name = "openpyxl" },
+    { name = "pillow" },
+    { name = "pydantic" },
+    { name = "pypdfium2" },
+    { name = "python-docx" },
+]
+
+[package.optional-dependencies]
+ocr = [
+    { name = "rapidocr-onnxruntime" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mcp", specifier = ">=1.30.0,<2" },
+    { name = "openpyxl", specifier = ">=3.1.5" },
+    { name = "pillow", specifier = ">=13.0.0" },
+    { name = "pydantic", specifier = ">=2.11.5" },
+    { name = "pypdfium2", specifier = ">=5.15.2" },
+    { name = "python-docx", specifier = ">=1.2.0" },
+    { name = "rapidocr-onnxruntime", marker = "extra == 'ocr'", specifier = ">=1.4.4" },
+]
+provides-extras = ["ocr"]
 
 [[package]]
 name = "pluggy"

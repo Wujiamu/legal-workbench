@@ -1,5 +1,32 @@
 # 变更记录
 
+## 2026-11-27 · 模块化拆分与按需分发架构（`v0.1.0` + `0009_case_metadata` · 零迁移已验收封板）
+
+- **版本基线与定位**：零数据库迁移（维持 `0009_case_metadata`）；保持完整离线工作台、PG18 底座及 `cd backend && uv sync --locked` 体验不变，同时面向已有自定义工作流/Agent 的律师拆出可独立选装的零数据库内核包与插件。关联变更单见 [20261127-模块化拆分与按需分发架构](docs/changes/20261127-模块化拆分与按需分发架构.md)。
+- **工作台模块开关与 MCP Toolsets**：
+  - 后端新增 [modules.py](backend/src/legal_workbench/modules.py)（`core` 必选，`notes`/`evidence`/`graph`/`claims`/`progress`/`time` 可选），支持 `LWB_ENABLED_MODULES` 与 `LWB_MCP_MODULES`；新增 `GET /api/v1/modules`（同步刷新 [openapi.json](docs/openapi.json) 与 [types.ts](frontend/src/api/types.ts)）与 `require_module` 路由守卫（关闭模块返回 404 `not_found`）；延迟导入 `errors` 保持 `scripts/lwb` 在系统裸 `python3` 下可用。
+  - [mcp_server.py](backend/src/legal_workbench/mcp_server.py) 为全部 57 个工具建立 `TOOL_MODULES` 映射并新增 `build_server()` / `--modules`，按模块裁剪工具集同时保留 `_enforce_case_fence` 单案硬围栏。
+  - 前端新增 [modules.tsx](frontend/src/modules.tsx)，在 [CaseNavBar.tsx](frontend/src/components/CaseNavBar.tsx)、[App.tsx](frontend/src/App.tsx)、[CaseWorkspacePage.tsx](frontend/src/pages/CaseWorkspacePage.tsx) 与 [CaseProgressPage.tsx](frontend/src/progress/CaseProgressPage.tsx) 实现导航过滤、禁用路由守卫、禁用页签回落与探测失败安全全开。
+- **三个零数据库独立分发插件（注册于 [.agents/plugins/marketplace.json](.agents/plugins/marketplace.json)）**：
+  - `plainfolio-legal-sops`（[plugins/plainfolio-legal-sops](plugins/plainfolio-legal-sops/README.md)）：零代码依赖的通用版《非标表格确定性 Python 算账规程》与《对外图表实质复核规程》。
+  - `plainfolio-dossier`（[packages/plainfolio-dossier](packages/plainfolio-dossier/README.md) + [plugins/plainfolio-dossier](plugins/plainfolio-dossier/README.md)）：零数据库法院自动装卷内核（7 项最小依赖、`mcp>=1.30.0,<2`、方案 A 默认 CWD 围栏与原件只读校验、JSON/CSV 清单、CLI + 4 工具 stdio MCP）；工作台 [dossier_export.py](backend/src/legal_workbench/dossier_export.py) 改为薄适配层。
+  - `plainfolio-parse`（[packages/plainfolio-parse](packages/plainfolio-parse/README.md) + [plugins/plainfolio-parse](plugins/plainfolio-parse/README.md)）：零数据库离线阅卷解析内核（6 项核心依赖 + `[ocr]` 可选扩展、缺 OCR 优雅降级、Markdown 锚点导出、分币种金额/日期、跨文件强指纹碰撞、表格列预览、方案 A 围栏、CLI + 6 工具 stdio MCP）；工作台 `parsing/*`、[textnorm.py](backend/src/legal_workbench/textnorm.py)、[search.py](backend/src/legal_workbench/search.py)、[graph_assist.py](backend/src/legal_workbench/graph_assist.py) 与 [table_graph_import.py](backend/src/legal_workbench/table_graph_import.py) 均改为复用内核。
+- **验证与实机烟测（全部退出码 0）**：
+  - 全量后端＋两独立包回归：**877 passed, 1 skipped**（含 `plainfolio-dossier` 20 项、`plainfolio-parse` 32 项）；`modules.py` 延迟导入修复后受影响 10 个测试集复测 **238 passed**（含 `test_modular_phase1.py` 29 项）；前端 `npm test -- --run` **59 文件 421 passed**＋`npm run build` 通过；`stage_bundle.py --dry-run` 与 `test_repo_hygiene.py` 通过。
+  - 零数据库隔离安装（`/tmp` 独立环境）：`plainfolio-dossier` 与 `plainfolio-parse`（不装 `[ocr]`）均不含 `sqlalchemy`/`psycopg`/`fastapi`/`rapidocr_onnxruntime`/`alembic`，CLI 与 stdio MCP 实跑 `acceptance_simulation/dossier` 样本通过。
+  - 三项本机实机烟测（本地留证 `docs/reports/20261127-模块化拆分与按需分发实机烟测.md`）：① PyInstaller `6.22.3` 基于 [plainfolio.spec](packaging/plainfolio.spec) 真实冻结构建并通过 `--version`/`--run-cli`/`--run-mcp`（57/18 工具）烟测；② 三套 `run-mcp.py` 真实 stdio 握手保留调用方 CWD，且隔离 `CODEX_HOME` 下 `codex plugin marketplace add` / `codex plugin add` 全部 4 个插件启用成功；③ 隔离库 `legal_workbench_smoke` 上 Chromium 浏览器实测 `LWB_ENABLED_MODULES=core,evidence` 导航过滤、`/progress` 守卫与 `?view=analysis` 自动回落正常。
+- **已知边界**：Windows 宿主机真机 NTFS Junction 与外部大模型多轮会话待按既有清单另验；两独立包锁定 `mcp>=1.30.0,<2`。
+
+## 2026-11-25 · Apache-2.0 许可切换、导出文件标准元数据与双端安装包 CI 构建（`0009_case_metadata` · 零迁移源码完成）
+
+- **开源许可调整（`ca22d98`）**：将 [LICENSE](LICENSE) 由 MIT 切换为 Apache License 2.0，新增 [NOTICE](NOTICE)，同步更新 [plugin.json](plugins/plainfolio/plugin.json) 的 `license` 字段。
+- **导出物标准来源元数据（`d3ce5d3`）**：[dossier_export.py](backend/src/legal_workbench/dossier_export.py) 导出的合订 PDF 与分项 PDF 写入标准 `/Creator`、`/Producer`（`PlainFolio (素章) <version>`）、`/Title`、`/Subject` 与时间戳，`01_证据目录.docx` 更新 `docProps/core.xml` 与 `app.xml`（保留用户非 PDF 原件字节不变）；[exportMeta.ts](frontend/src/ui/exportMeta.ts) 为关系图与诉请瀑布图导出 SVG 写入标准 W3C Dublin Core `<metadata>`（后端 `test_dossier_export.py` 7 passed，前端 `exportSvg.test.ts` & `exportClaimsSvg.test.ts` 12 passed）。
+- **GitHub Actions 双端打包流水线与 macOS `.dmg` 实机校验（`9542421`..`df4210b`）**：
+  - 新增 [.github/workflows/release-installers.yml](.github/workflows/release-installers.yml)，在 `windows-latest` 与 `macos-15` 云端分别组装 EDB PostgreSQL `18.3-1`、RapidOCR 模型与 PyInstaller 6.x，产出的 `PlainFolio-Setup-0.1.0-x64.exe`（~140 MB）与 `PlainFolio-0.1.0-macos-arm64.dmg`（~343 MB）均通过各自系统下的冻结态烟测（`--version`、`--init-only`、`--start-db`、`--run-doctor`、`--run-cli check-consistency`、`--run-cli agent-status`、`--stop`）。
+  - macOS 本机安全验证（Run `45628787812`）：完成 `.dmg` SHA-256 校验、只读挂载、`arm64` 包体检查、`otool -L` 动态库可迁移性确认（仅系统库与 `@loader_path/../lib/...`，无 Homebrew/构建机硬编码路径）、隔离目录冻结态 `--version`/`--status`/内嵌 PG `18.3` 与 `run-mcp.py --print-plan` 检查，以及实际 `adhoc` 未签名状态核对。
+- **仓库卫生门禁（治本）**：补齐本机文档漂移、清理 53 处指向被 `.gitignore` 排除的 `docs/reports/` 的 GitHub 404 链接，并新增 [test_repo_hygiene.py](backend/tests/test_repo_hygiene.py) 校验 Markdown 站内链接可追踪、多处版本号同步、主依赖与 `docs/REUSE.md` 对齐以及活跃变更单状态。
+- **未完成边界**：安装包尚未代码签名/公证（macOS 首次启动需绕过 Gatekeeper，Windows 需过 SmartScreen）、尚未发布 GitHub Release，且尚未在干净 macOS 账户走完图形化双击冷启动建库及在真实 Windows 宿主机安装验收。
+
 ## 2026-11-25 · Agent 访问硬围栏与授权收紧（路线 2 · `0009_case_metadata` · 零迁移源码完成）
 
 - **版本基线与兼容性**：零数据库迁移（维持 `0009_case_metadata`）；未改动 `.env`、`var/`、真实案件数据或网页端行为。关联变更单见 [20261125-Agent访问硬围栏与授权收紧](docs/changes/20261125-Agent访问硬围栏与授权收紧.md)。
@@ -10,7 +37,7 @@
 - **移除常驻 DSH Cordis 插件**：删除 `plugins/dsh-plainfolio/` 整目录（源码、构建产物、依赖与测试，`git ls-files` 为空，无用户业务数据）；变更单标记废弃并保留调研留痕；DSH 改为按需使用通用 `@deepseek-ai/dsh-mcp-client` stdio 配置，受同一门禁约束。
 - **业务 Skill 全面收紧**：五份 Skill（`plainfolio-workbench`、`legal-workbench-cli`、`chart-substantive-review`、`nonstandard-table-script-sop`、`legal-workbench-e2e-acceptance`，共 10 个镜像文件）正文最前面统一加入「授权前置与硬围栏纪律」：禁止默认连接/探测/列举、必须先申请授权（目标案件＋模型合规性＋本机 `agent-grant`）、`forbidden` 必须停下不得绕过、结束提醒 `agent-revoke`/`agent-lock`。
 - **验证**：后端真实 PG18 全量 **792 passed, 1 skipped**；本轮受影响 7 个测试集 **180 passed, 1 skipped**；新增 [test_agent_access_gate.py](backend/tests/test_agent_access_gate.py) **58 项**（含 52 工具反射审计、无授权写工具断言、真实 stdio 握手、策略降级与权限、CLI 命令闭环、环境变量覆盖），并做四项反向验证（撤掉围栏/关掉导入审计、`allowlist` 换回未过滤查询、损坏文件降级为 `allow_all`）均能检出对应失败；`packaging/build_macos_dmg.py --dry-run` 与 `build_windows_exe.py --dry-run` 均 exit 0。仓库内不存在 `var/runtime/agent-access.json`，`plugins/dsh-plainfolio/` 已不存在。
-- **未验证**：未在真实 Codex / DSH / Claude Desktop 客户端跑会话，未在 Windows 实机执行授权命令，未真机构建安装包。实机验收项见 [NEXT_STEPS](docs/NEXT_STEPS.md)。
+- **未验证**：未在真实 Codex / DSH / Claude Desktop 客户端跑会话，未在 Windows 实机执行授权命令，本节点当时亦未真机构建安装包（安装包构建与冻结烟测已于同日后续 GitHub Actions CI 完成，见上方条目）。实机验收项见 [NEXT_STEPS](docs/NEXT_STEPS.md)。
 
 ## 2026-11-24 · 通用 Agent 插件包与桌面安装包打包工程（`0009_case_metadata` · 零迁移源码完成，待实机验收）
 
@@ -84,7 +111,7 @@
   - **归档只读防穿透**：`source_notes.py`（`create_annotation` 在 PDFium 前预检 `archived_at` 并与 `review_annotation` 统一用 `lock_case_writable`）及 `analysis.py`（`save_analysis`/`review_analysis` 同步改用 `lock_case_writable`）阻止已归档案件通过 MCP/CLI 写入；工作台首页、材料详情、案件概览、检索保存、标注与进度页面全部禁用写控件。
   - **多币种表格导入与拆列检索**：`table_graph_import.py` 与 `TableImportDialog.tsx` 新增 `currency_col`、按币种分桶汇总及 `currency_conflict_same_pair` 同对跨币种拦截（支持 `HK$`/`US$` 与存量无币种关系续写）；`search.py` 新增表格拆列币种金额提取（支持 `=>` 公式缓存并防止相邻年份/回单号误抽）。
   - **解析分类、引证定位与画布修复**：损坏 PDF 改归 `PARSE_FAILED`；`chart_export.py` 扩展导出定位字段并输出 DOCX 段落与 TXT 行号；`GraphCanvas.tsx` 修复实体卡 `出处` 计数并实现同对双向/多边曲线及标签分道偏移；`cli.py` 支持 `save-analysis --content-file` 单独传参并互斥校验。
-- **验证与已知边界**：后端 **611 passed**（含 `test_acceptance_fixes_20261123.py` 10 项）、前端 **56 文件 403 passed** + `tsc --noEmit && vite build` 通过、两轮独立代码审查签收闭环；正式 `127.0.0.1:8765` 升级后 `check-consistency`（`ok: true`）、CLI/服务拒写及只读核对、内置 Chromium 四页实机复测通过。已知边界：已归档专案未对历史解析快照重跑覆盖（拆列检索与损坏 PDF 分类以隔离 PG18 + Worker 端到端测试为准）；Safari 实机未测。详见 [2026-11-23 TEST-ONLY 实机验收修复与正式应用报告](docs/reports/20261123-TEST-ONLY-实机验收修复与正式应用.md)。
+- **验证与已知边界**：后端 **611 passed**（含 `test_acceptance_fixes_20261123.py` 10 项）、前端 **56 文件 403 passed** + `tsc --noEmit && vite build` 通过、两轮独立代码审查签收闭环；正式 `127.0.0.1:8765` 升级后 `check-consistency`（`ok: true`）、CLI/服务拒写及只读核对、内置 Chromium 四页实机复测通过。已知边界：已归档专案未对历史解析快照重跑覆盖（拆列检索与损坏 PDF 分类以隔离 PG18 + Worker 端到端测试为准）；Safari 实机未测。详见 2026-11-23 TEST-ONLY 实机验收修复与正式应用报告（本地归档 `docs/reports/20261123-TEST-ONLY-实机验收修复与正式应用.md`）。
 
 ## 2026-11-22 · 图表程序化能力与对外引用导出（**源码交付，零迁移已应用至本机 127.0.0.1:8765**）
 
@@ -96,26 +123,26 @@
   - **候选主体消歧台与表格列映射（Wave 2）**：文书首部主体与简称自动提取消歧；XLSX/CSV 通用列映射导入（`Decimal` 精确计算转分，上限 50000 行，拦截覆盖已排除关系并单独汇总异常 `skipped_rows`）。
   - **外部 Skill 模板（Wave 3）**：新增 `docs/skills/chart-substantive-review/SKILL.md` 与 `docs/skills/nonstandard-table-script-sop/SKILL.md`。
 - **实机联调修复**：定位并修复关系图自动排版 `save_layout` 返回 404（「主体不在本图」）缺陷（`httpExecutor.ts` 与 `graph.py` 统一兼容 `RelationGraphNode.entity_id`/`id`）。
-- **验证与已知限制**：全量后端 **601 passed**、前端 **54 文件 398 passed**（`tsc --noEmit && vite build` 通过）；AC10 外部复核 Skill 实测准确检出全部 3 类预设错误；AC12 前后端独立双审闭环；隔离 Chromium 浏览器两轮 E2E 通过；正式环境升级后 `check-consistency`（`ok: true`）、40 张业务表行数与只读 HTTP 验收通过。未验证项：Safari 实机自动测试（60ms Safari 输入法保护窗口由组件单测覆盖）、760px 布局使用元素 `boundingBox().width` 与截图核对（沙箱禁 `page.evaluate`）、真实案件尚未试用。详见 [图表程序化能力验收与正式应用](docs/reports/20261122-图表程序化能力验收与正式应用.md)。
+- **验证与已知限制**：全量后端 **601 passed**、前端 **54 文件 398 passed**（`tsc --noEmit && vite build` 通过）；AC10 外部复核 Skill 实测准确检出全部 3 类预设错误；AC12 前后端独立双审闭环；隔离 Chromium 浏览器两轮 E2E 通过；正式环境升级后 `check-consistency`（`ok: true`）、40 张业务表行数与只读 HTTP 验收通过。未验证项：Safari 实机自动测试（60ms Safari 输入法保护窗口由组件单测覆盖）、760px 布局使用元素 `boundingBox().width` 与截图核对（沙箱禁 `page.evaluate`）、真实案件尚未试用。详见 图表程序化能力验收与正式应用（本地归档 `docs/reports/20261122-图表程序化能力验收与正式应用.md`）。
 
 ## 2026-11-22 · 关系图、证据目录、诉请金额及跨案期限正式上线
 
 - 正式工作台从 `0006_case_archive_time` 升级到 `0008_claim_amounts`。首页启用真实跨案期限，案件工作区新增关系图、证据目录和诉请金额。
 - 关系图显示实时目录编号，快照保留冻结时的编号和出处。目录可逐条复核、处理余项并保留已确认条目。定位页加载失败时可读原文件。
-- 已校验升级前备份，旧案与受管文件数量一致。升级、只读验收和回退路径见 [联合验收与正式升级记录](docs/reports/20261122-P5联合隔离验收.md)。
+- 已校验升级前备份，旧案与受管文件数量一致。升级、只读验收和回退路径见 联合验收与正式升级记录（本地归档 `docs/reports/20261122-P5联合隔离验收.md`）。
 
 ## 2026-11-21 · 跨案期限时间轴及两项 P1 原型（源码已交付，隔离评审）
 
 - 新增首页跨案期限时间轴与只读接口，覆盖全部在办案件。默认前 7 天至后 60 天，较早逾期另列，可筛选已完成期限并跳转案件概览。
 - 新增主体关系图和诉请金额内存原型，首页设有演示入口。业务数据结构的实施从 P2 开始。
-- 当时可从 [本机合成评审版](http://127.0.0.1:18170/) 打开。工作区源码可从验收记录所列基线回退，次日完成正式应用。详见 [验收记录](docs/reports/20261121-期限时间轴与可视化原型验收.md)。
+- 当时可从 [本机合成评审版](http://127.0.0.1:18170/) 打开。工作区源码可从验收记录所列基线回退，次日完成正式应用。详见 验收记录（本地归档 `docs/reports/20261121-期限时间轴与可视化原型验收.md`）。
 
 ## 2026-11-20 · P6 后验收：图形视图排序修复与验收脚本端口隔离（**已应用到本机运行环境**）
 
-- 对尚未验收部分做实测验收：全量回归（后端 372、前端 170）、T19 验收脚本 13 项判定、备份恢复演练、正式服务 8765 上归档/工时/进度命令/关联/撤销/Agent 徽标/回收站端到端（TEST-ONLY 案件，真实案件只读核对未变）。证据见 [P6 后验收实测记录](docs/reports/20261120-P6后验收实测记录.md)。
+- 对尚未验收部分做实测验收：全量回归（后端 372、前端 170）、T19 验收脚本 13 项判定、备份恢复演练、正式服务 8765 上归档/工时/进度命令/关联/撤销/Agent 徽标/回收站端到端（TEST-ONLY 案件，真实案件只读核对未变）。证据见 P6 后验收实测记录（本地归档 `docs/reports/20261120-P6后验收实测记录.md`）。
 - **修复 D1（用户可见）**：正式案件图形视图节点重叠——后端快照按创建序返回时子节点先于父节点，React Flow 按数组顺序解析父子关系失败。`buildGraphModel` 改为树先序重排；新增回归并反向验证。重建 `frontend/dist`（新壳 `index-CkqSnLXQ.js`）并由 8765 下发，旧产物另存 `var/backups/p6-20261120-184126/frontend-dist-pre-graphfix.tar.gz`。浏览器若仍显示旧版请硬刷新一次（⌘⇧R）。
 - **修复 D2（验收脚本）**：`run_acceptance.py` 网页并发节改用空闲端口并校验子进程存活，杜绝正式服务在跑时误打生产库。
-- **Safari 实机已补齐（2026-11-20 晚）**：用户开启「允许远程自动化」后，safaridriver（Safari 27.2）直连 8765 实测 14 类检查全过——图形零重叠（D1 修复生效）、归档只读、工时弹窗、`<dialog>` 模态焦点、Esc、输入法合成事件、⌘Z 撤销、黄/绿徽标、760px 半屏。截图与数据见 [P6 后验收实测记录第 6 节](docs/reports/20261120-P6后验收实测记录.md)。
+- **Safari 实机已补齐（2026-11-20 晚）**：用户开启「允许远程自动化」后，safaridriver（Safari 27.2）直连 8765 实测 14 类检查全过——图形零重叠（D1 修复生效）、归档只读、工时弹窗、`<dialog>` 模态焦点、Esc、输入法合成事件、⌘Z 撤销、黄/绿徽标、760px 半屏。截图与数据见 P6 后验收实测记录第 6 节（本地归档 `docs/reports/20261120-P6后验收实测记录.md`）。
 - 遗留：真实中文输入法、真实案卷试用仍需用户侧条件；迁移 0006/归档守卫/工时口径的独立复核已委派，结论待回。
 
 ## 2026-11-20 · 办案进度、结案归档与工时（**已应用到本机运行环境**）
@@ -123,7 +150,7 @@
 - 办案进度可视化 P2–P4：迁移 `0005_case_progress`（通用节点树、类型化关系、业务关联、变更记录、案件级序号）、进度服务与 HTTP/MCP/CLI 入口、案件进度页（大纲/图形视图、待确认面板、分区撤销）。迁移 `0006_case_archive_time` 新增结案归档（`cases.archived_at`）与工时记录（`time_entries`）。
 - 结案归档是案件级操作，按钮在树状图之外；归档后进度、材料、办理信息与工时只读，可从首页隐藏并取消归档。
 - 工时：计时器（0.25h 向上取整）、补录（0.25 步进）、日视图与按标题汇总，均由标题行「工时」按钮弹出。
-- 后端 372 项、前端 169 项测试通过；隔离实例（端口 8799、独立库 `legal_workbench_p5`）上 Chromium 与 WebKit 双引擎实测通过；备份恢复演练覆盖归档与工时数据。证据见 [P5 隔离验收与恢复演练](docs/reports/20261120-P5隔离验收与恢复演练.md)。
+- 后端 372 项、前端 169 项测试通过；隔离实例（端口 8799、独立库 `legal_workbench_p5`）上 Chromium 与 WebKit 双引擎实测通过；备份恢复演练覆盖归档与工时数据。证据见 P5 隔离验收与恢复演练（本地归档 `docs/reports/20261120-P5隔离验收与恢复演练.md`）。
 - **已应用（2026-11-20）**：升级前备份 `var/backups/p6-20261120-184126/`（`complete: true`，另存旧 `frontend/dist`）；`0004_case_workbench → 0005 → 0006`，`progress backfill: 1 case(s) instantiated`；重建 `frontend/dist` 并启动 8765（uvicorn＋worker）。现有 1 个案件保留、进度树 6 个默认节点，材料与业务数据未变。只读验收通过：`/api/v1/progress/rules` 由 404 变 200，进度页在 Chromium 渲染正常，工时与结案归档入口可见。升级步骤与回退办法见 [变更记录](docs/changes/20261116-办案进度可视化.md)。
 - 遗留：Safari 实机（macOS 自动化权限所限，以 WebKit 引擎替代）、真实中文输入法、真实案卷试用；本轮改动未获独立 Agent 复核（Codex 额度用尽）。
 

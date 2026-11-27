@@ -18,7 +18,7 @@ import shutil
 import sys
 import tempfile
 
-from . import runtime_paths
+from . import modules, runtime_paths
 
 def _source_root() -> Path:
     """Repository root for a checkout; the bundle root for a frozen build.
@@ -52,6 +52,9 @@ class Settings:
     parse_timeout_seconds: int
     max_image_pixels: int
     pg_bin: Path | None = None
+    # 模块开关：HTTP/CLI 用 enabled_modules，MCP 用 mcp_modules（未配置时回退前者）。
+    enabled_modules: tuple[str, ...] = modules.ALL_MODULES
+    mcp_modules: tuple[str, ...] = modules.ALL_MODULES
 
 
 def instance_config_path() -> Path:
@@ -235,6 +238,8 @@ def load_settings() -> Settings:
         return path if path.is_absolute() else home / path
     roots = get("IMPORT_ROOTS")
     pg_bin_raw = get("PG_BIN").strip()
+    enabled_modules = modules.parse_enabled_modules(get("ENABLED_MODULES", "all"))
+    mcp_raw = get("MCP_MODULES", "").strip()
     return Settings(
         database_url=get("DATABASE_URL"),
         migration_url=get("MIGRATION_URL") or get("DATABASE_URL"),
@@ -246,6 +251,8 @@ def load_settings() -> Settings:
         parse_timeout_seconds=int(get("PARSE_TIMEOUT_SECONDS", "120")),
         max_image_pixels=int(get("MAX_IMAGE_PIXELS", "50000000")),
         pg_bin=local_path(pg_bin_raw) if pg_bin_raw else None,
+        enabled_modules=enabled_modules,
+        mcp_modules=modules.parse_enabled_modules(mcp_raw) if mcp_raw else enabled_modules,
     )
 
 

@@ -71,6 +71,27 @@ stdio 传输；stdout 仅协议数据，日志走 stderr。客户端配置示例
 
 失败时返回结构化错误（`isError: true`，正文含错误码），不会把失败伪装成成功文本。
 
+## 按需裁剪工具集（模块开关）
+
+平台当前注册 **57 个**工具，分属 7 个模块：`core`（12，材料/检索/出处/访问自检）、`notes`（5，标注与分析）、`progress`（14）、`graph`（13）、`evidence`（6）、`claims`（6），以及归属 `graph`+`claims` 任一即可的 `export-chart-audit-bundle`（1）。
+
+只给 Agent 它用得上的那部分，有两种等价方式：
+
+```sh
+# 1. 命令行（优先级最高，只影响本次进程）
+.venv/bin/python -m legal_workbench.mcp_server --modules core,evidence
+
+# 2. 环境变量（写进客户端配置或 .env）
+LWB_MCP_MODULES=core,evidence
+```
+
+规则：
+
+- 省略 `--modules` 时读 `LWB_MCP_MODULES`；两者都不设时等同 `all`，工具清单与描述与裁剪前逐字相同。
+- `core` 始终被加入且排在首位；模块名不区分大小写，未知模块名直接报 `invalid_input`，不静默丢弃。
+- 裁剪只影响**暴露哪些工具**，不影响访问门禁：复制出去的工具仍是带 `@_case_guard` 的同一函数，未授权案件照样 `forbidden`。
+- 裁剪只作用于 MCP：`LWB_ENABLED_MODULES` 控制网页（HTTP）端的功能面，两者可分别设置（例如网页全开、只给 Agent 材料与检索）。
+
 标注工具为 `annotate_file` 和 `list_annotations`。登记时提供同案 `case_id`、固定的 `file_version_id`、`kind`（`transcription` 或 `interpretation`）和 `body`。对 PDF 可指定从 1 开始的 `page`。Agent 标注默认待人工复核，`reviewed_text` 为空。承办人在网页对照原件并确认或修订，原标注仍保留。后续重新识别可登记一条待复核记录。
 
 ## Agent 访问门禁（默认锁死＋单案授权）

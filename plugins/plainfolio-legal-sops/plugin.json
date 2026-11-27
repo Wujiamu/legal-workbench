@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "plainfolio-legal-sops",
+  "version": "0.1.0",
+  "description": "独立法律方法论插件：不依赖任何工作台、数据库或 MCP 服务，只提供两份可直接执行的办案规程——非标银行流水与多表头对账单的确定性 Python 算账规程，以及对外关系图与诉请金额的实质复核规程。装入任意支持 Agent Skills 的客户端即可使用。",
+  "license": "Apache-2.0",
+  "keywords": [
+    "legal",
+    "litigation",
+    "sop",
+    "skills",
+    "offline",
+    "bank-statement",
+    "chart-review",
+    "素章"
+  ],
+  "skills": "./skills/",
+  "extensions": {
+    "com.openai": {
+      "category": "Legal",
+      "displayName": "素章 · 法律方法论 SOP（独立版）",
+      "shortDescription": "零代码、零数据库依赖的两份办案规程：确定性算账与非标表格、对外图表实质复核。",
+      "longDescription": "本插件只含方法论，不含任何服务端、数据库或脚本运行环境，因此可以装在没有素章工作台的电脑上，也可以与律师自有的目录、Obsidian 库或 Excel 台账配合使用。两份 Skill 都要求先读少量样本再动手、把每一步计算留痕、把结论交承办人终审：算账规程强制用 Python 与 Decimal 确定性计算并输出异常跳行清单，复核规程按四步核对主体、金额、方向与证明力。涉密、涉个人隐私或当事人禁止上云的案卷，严禁接入云端模型，只能使用本机离线模型；两份 Skill 开头都写明这条边界。若同时装有素章工作台，可按文末的可选联动一节把结果写入待确认提案，未接入时照旧独立执行。",
+      "onboardingSkill": "./skills/legal-table-script-sop/SKILL.md"
+    }
+  }
+}

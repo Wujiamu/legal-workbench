@@ -138,6 +138,28 @@ codex plugin add plainfolio@plainfolio-local
 | `LWB_AGENT_ACCESS_FILE` | 覆盖访问策略文件路径（默认 `<工作台目录>/var/runtime/agent-access.json`）；主要用于测试与多实例隔离 |
 | `LWB_MCP_ALLOWED_CASES` | 逗号分隔的 `case_id` 列表，把本次启动限定为这些案件（受控单案启动）。含非法 UUID 时显式报错，不会静默忽略 |
 | `LWB_MCP_ACCESS_MODE` | `deny_all` / `allowlist` / `allow_all`。与 `LWB_MCP_ALLOWED_CASES` 同时存在时取更严格的一个；两者都**不能**撤销策略文件里的锁 |
+| `LWB_MCP_MODULES` | 逗号分隔的模块名，只把对应工具暴露给客户端（`core` 恒在）。未设置时回退 `LWB_ENABLED_MODULES`，再回退全部，见下节 |
+| `LWB_ENABLED_MODULES` | 网页（HTTP）端的功能面开关（`all` 或缺省＝全开）。**不是权限**：能不能看某个案件仍由上面的门禁决定 |
+
+### 只给 Agent 用得上的工具（可选）
+
+平台默认注册 57 个工具。若某个客户端只负责材料与检索，可以裁剪掉进度、关系图、证据目录、诉请金额与标注相关的工具，减少工具描述占用的上下文：
+
+```json
+{
+  "mcpServers": {
+    "plainfolio": {
+      "command": "python3",
+      "args": ["${PLUGIN_ROOT}/scripts/run-mcp.py"],
+      "env": { "LWB_MCP_MODULES": "core,evidence" }
+    }
+  }
+}
+```
+
+启动器会把环境变量原样交给 MCP 服务；直接跑 `python -m legal_workbench.mcp_server` 时也可以加 `--modules core,evidence`（优先级高于环境变量）。
+
+规则：`core` 恒在且排首位；未知模块名报 `invalid_input`（不静默丢弃）；不设时等同全部，行为与裁剪前完全一致。裁剪**不削弱**访问门禁——被裁掉的只是用不上的工具，留下的一样要求按案授权。
 
 其余 `LWB_*`（`DATABASE_URL`、`DATA_ROOT`、`IMPORT_ROOTS` 等）由工作台的 `.env` 提供，插件包不读取也不转存。
 

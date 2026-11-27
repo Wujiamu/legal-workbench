@@ -1,0 +1,31 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "plainfolio-parse",
+  "version": "0.1.0",
+  "description": "素章（PlainFolio）零数据库离线阅卷解析器的独立 Agent 插件：免装工作台，用 stdio MCP 把本地案卷材料（TXT/DOCX/XLSX/PDF/图片）解析成带页码与工作表锚点的结构化文本与 Obsidian 友好 Markdown，并扫描分币种金额、日期与跨文件强指纹碰撞。默认目录围栏＋原件只读。",
+  "license": "Apache-2.0",
+  "keywords": [
+    "legal",
+    "parsing",
+    "ocr",
+    "pdf",
+    "docx",
+    "xlsx",
+    "evidence",
+    "mcp",
+    "offline",
+    "plainfolio",
+    "素章"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "extensions": {
+    "com.openai": {
+      "category": "Legal",
+      "displayName": "素章 · 离线阅卷解析器（独立版）",
+      "shortDescription": "零数据库解析：本地案卷 → 结构化文本 + 精确金额/日期 + 跨文件暗线，含 MCP 服务与办案 Skill。",
+      "longDescription": "本插件不含工作台、不含数据库，只提供一套本地解析能力：一个 stdio MCP 服务（六个工具：围栏确认、单文件解析、整目录解析、精确金额与日期扫描、跨文件强指纹碰撞排查、表格列预览）与一份办案 Skill。默认只允许读取当前工作目录及其子目录，需要处理其他位置的材料时由承办人在 PLAINFOLIO_ALLOWED_ROOTS 中显式列出；任何一级符号链接或 NTFS Junction 一律拒绝；原件只读，输出路径与任何输入文件相同即报错。扫描件与图片走本机离线 OCR（可选 plainfolio-parse[ocr]，模型目录由 PLAINFOLIO_OCR_MODEL_DIR 指定），缺依赖或缺模型时纯文本与原生文字层 PDF 照常解析，需要 OCR 的页面会逐页标为失败并写明原因，不会静默丢页。金额一律按币种分别汇总，绝不跨币种相加；身份证号与物流单号有专门的防误报规则。涉密、涉个人隐私或当事人禁止上云的案卷，严禁接入云端模型，只用本机离线模型。",
+      "onboardingSkill": "./skills/plainfolio-parse/SKILL.md"
+    }
+  }
+}

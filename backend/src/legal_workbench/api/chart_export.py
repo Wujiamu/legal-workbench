@@ -6,11 +6,11 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from .. import chart_export
-from .deps import Guarded, get_db
+from .deps import Guarded, get_db, require_module
 from .ids import uuid_of
 
-router = APIRouter(prefix="/api/v1/cases/{case_id}/charts",
-                   tags=["chart-export"], dependencies=[Guarded])
+router = APIRouter(prefix="/api/v1/cases/{case_id}/charts", tags=["chart-export"],
+                   dependencies=[Guarded, Depends(require_module("graph", "claims"))])
 
 
 @router.post("/preflight", response_model=chart_export.ChartPreflight)

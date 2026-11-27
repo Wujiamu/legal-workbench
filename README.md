@@ -115,8 +115,9 @@
 <summary>给律所 IT / 开发者与 AI 助手（技术架构、接口与日常命令行）</summary>
 
 - 技术与数据模型：[系统架构](docs/ARCHITECTURE.md) · [数据表与约束](docs/SCHEMA.md) · [HTTP 接口与 OpenAPI](docs/API.md) · [外部 Agent / MCP / CLI 接入指南](docs/AGENT.md) · [通用 Agent 插件包](plugins/plainfolio/README.md)（便携 MCP + 业务 Skills；默认锁死、不提供常驻宿主插件）
+- 按需选装与模块开关：若仅需部分能力接入自有工作流，可通过 [本地插件市场](.agents/plugins/marketplace.json) 按需安装独立零数据库包（[独立法院装卷](plugins/plainfolio-dossier/README.md) · [独立离线解析](plugins/plainfolio-parse/README.md) · [通用法律 SOP](plugins/plainfolio-legal-sops/README.md)），或在工作台本体通过 `LWB_ENABLED_MODULES` / `LWB_MCP_MODULES` 裁剪功能面。
 - Agent 授权：接进任何 MCP 客户端时，工作台默认锁死（`deny_all`），只能由你在本机按案放行：`scripts/lwb agent-status`（看状态）· `scripts/lwb agent-grant <case_id>`（临时放行单案）· `scripts/lwb agent-revoke <case_id>`（收回）· `scripts/lwb agent-lock`（立即全局锁死）· `scripts/lwb agent-allow-all --confirm`（全开，仅限本地模型）。Windows 用 `scripts\lwb.cmd`。
-- 桌面分发：[安装包打包与实机验收清单](docs/PACKAGING.md)（macOS `.dmg` / Windows `.exe`；工程已实现，尚未在真机构建与安装）。
+- 桌面分发：[安装包打包与实机验收清单](docs/PACKAGING.md)（macOS `.dmg` / Windows `.exe` 打包说明与自检清单，当前构建与验收进展见 [NEXT_STEPS.md](docs/NEXT_STEPS.md)）。
 - 日常运维：`scripts/lwb doctor`（体检）· `scripts/lwb migrate`（升级表结构）· [备份与恢复命令](docs/BACKUP_RESTORE.md)（`cli backup` / `verify-backup` / `restore`）· 实机验收与测试基线见 [测试报告](docs/TEST_REPORT.md) 与 [变更记录](CHANGELOG.md)。
 
 </details>

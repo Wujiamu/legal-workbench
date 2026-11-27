@@ -1,0 +1,35 @@
+[project]
+name = "plainfolio-dossier"
+version = "0.1.0"
+description = "素章（PlainFolio）法院自动装卷器：零数据库、零后端，按中国法院装订规范生成证据合订卷宗 ZIP（合订 PDF + Word/CSV 目录 + 网上立案分项材料）。"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "Apache-2.0"
+keywords = ["legal", "litigation", "evidence", "dossier", "pdf", "plainfolio", "素章"]
+# 最小依赖：只保留排版与文档渲染所需，绝不引入数据库/HTTP 服务栈。
+# `mcp` 上界锁 <2：本包用 v1 的 `mcp.server.fastmcp.FastMCP` 注册工具（与工作台
+# 一致）；mcp 2.x 把 FastMCP 改名为 MCPServer 并改了注册/运行语义，放开上界会让
+# 一次普通 `pip install` 变成"服务启动即断开"。升级需单独迁移并回归。
+dependencies = [
+  "pypdf>=5.0.0",
+  "pypdfium2>=5.15.2",
+  "reportlab>=5.1.0",
+  "python-docx>=1.2.0",
+  "pillow>=13.0.0",
+  "pydantic>=2.11.5",
+  "mcp>=1.30.0,<2",
+]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+plainfolio-dossier = "plainfolio_dossier.cli:main"
+plainfolio-dossier-mcp = "plainfolio_dossier.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plainfolio_dossier"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/plainfolio_dossier", "README.md"]

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "plainfolio-dossier",
+  "version": "0.1.0",
+  "description": "素章（PlainFolio）法院自动装卷器的独立 Agent 插件：零数据库、免装工作台，把本地材料目录按中国法院装订规范装成证据合订卷宗 ZIP（A4 排版、20mm 装订线、精确页码目录、网上立案分项材料），并强制原件只读与目录围栏。",
+  "license": "Apache-2.0",
+  "keywords": [
+    "legal",
+    "litigation",
+    "evidence",
+    "dossier",
+    "court-filing",
+    "mcp",
+    "offline",
+    "plainfolio",
+    "素章"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "extensions": {
+    "com.openai": {
+      "category": "Legal",
+      "displayName": "素章 · 法院自动装卷器（独立版）",
+      "shortDescription": "零数据库装卷：材料目录 → 合规证据卷宗 ZIP，含 MCP 服务与四步办案 Skill。",
+      "longDescription": "本插件不含工作台、不含数据库，只提供一套本地装卷能力：一个 stdio MCP 服务（四个工具：围栏确认、生成清单草案、只读预检、装卷出包）与一份办案 Skill。默认只允许访问当前工作目录及其子目录，需要处理其他位置的材料时由承办人在 PLAINFOLIO_ALLOWED_ROOTS 中显式列出；原件只读，输出路径与任何输入材料相同即报错。生成的 ZIP 内含 00_证据合订卷宗.pdf（A4、左侧 20mm 装订线、封面＋精确页码目录＋每项分隔页＋右下角正文连续页码）、01_证据目录.docx（可编辑）、01_证据目录.csv 与 02_分项证据材料/（按证据编号命名的单份材料，用于网上立案逐条上传）。清单草案一律先交承办人逐条确认，页码、证明目的与分项命名须人工复核后才对外提交。涉密、涉个人隐私或当事人禁止上云的案卷，严禁接入云端模型，只用本机离线模型。",
+      "onboardingSkill": "./skills/plainfolio-dossier/SKILL.md"
+    }
+  }
+}

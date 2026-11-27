@@ -31,6 +31,9 @@ from .schemas import (
     UpdateRelationInput,
 )
 from .storage import Storage
+from plainfolio_parse import tables
+from plainfolio_parse.errors import ParseError
+
 from .textnorm import normalize_with_map
 
 MAX_IMPORT_BYTES = evidence_catalog.MAX_IMPORT_BYTES
@@ -39,43 +42,21 @@ TABLE_SUFFIXES = frozenset({".xlsx", ".csv"})
 _OUTBOUND_DIRECTIONS = frozenset({"支出", "转出", "借出", "out", "debit", "付", "付款", "汇出", "出账"})
 _INBOUND_DIRECTIONS = frozenset({"收入", "转入", "借入", "in", "credit", "收", "收款", "汇入", "入账", "进账"})
 
-_CURRENCY_TOKEN_RE = re.compile(
-    r"(?:(?:US|HK)\$|RMB|CNY|USD|EUR|HKD|JPY|GBP|人民币|美元|美金|欧元|港币|港元|日元|英镑|[¥￥$,€£元\s])",
-    re.IGNORECASE,
-)
-_INLINE_CURRENCY_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"(?:HKD|港币|港元|HK\$)", re.IGNORECASE), "HKD"),
-    (re.compile(r"(?:USD|美元|美金|US\$|\$)", re.IGNORECASE), "USD"),
-    (re.compile(r"(?:CNY|RMB|人民币|[¥￥])", re.IGNORECASE), "CNY"),
-    (re.compile(r"(?:EUR|欧元|€)", re.IGNORECASE), "EUR"),
-    (re.compile(r"(?:JPY|日元)", re.IGNORECASE), "JPY"),
-    (re.compile(r"(?:GBP|英镑|£)", re.IGNORECASE), "GBP"),
-)
-_CURRENCY_ALIASES = {
-    "CNY": "CNY", "RMB": "CNY", "人民币": "CNY", "¥": "CNY", "￥": "CNY",
-    "USD": "USD", "美元": "USD", "美金": "USD", "US$": "USD", "$": "USD",
-    "EUR": "EUR", "欧元": "EUR", "€": "EUR",
-    "HKD": "HKD", "港币": "HKD", "港元": "HKD", "HK$": "HKD",
-    "JPY": "JPY", "日元": "JPY",
-    "GBP": "GBP", "英镑": "GBP", "£": "GBP",
-}
-_CURRENCY_CODE_RE = re.compile(r"^[A-Za-z]{3}$")
-_DECIMAL_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
-_DATE_SEP_RE = re.compile(r"^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?(?:[T\s].*)?$")
-_DATE_COMPACT_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})(?:\s+\d{4,6})?$")
-
-_ORG_CONTAINS = ("有限公司", "有限责任公司", "股份有限公司", "合伙企业", "律师事务所", "会计师事务所")
-_ORG_SUFFIXES = (
-    "有限公司", "股份有限公司", "有限责任公司", "公司", "集团", "银行", "支行", "分行",
-    "信用社", "法院", "仲裁委员会", "检察院", "公安局", "事务所", "企业", "中心", "合伙",
-    "合伙企业", "学校", "医院", "基金", "信托", "证券", "保险", "商行", "经营部", "工作室",
-    "ltd", "ltd.", "limited", "inc", "inc.", "corp", "corp.", "co.", "llc", "llp", "lp", "bank", "group",
-)
-_TRAILING_PAREN_RE = re.compile(r"[（(][^（）()]*[)）]\s*$")
 
 
 def _err(code: ErrorCode, message: str, **details: Any) -> WorkbenchError:
     return WorkbenchError(code, message, details or None)
+
+
+# 独立包的错误码 → 工作台 ErrorCode；只映射真正会出现的六类，其余按内部错误处理。
+_PARSE_CODE_MAP = {
+    "invalid_input": ErrorCode.INVALID_INPUT,
+    "not_found": ErrorCode.NOT_FOUND,
+    "forbidden": ErrorCode.FORBIDDEN,
+    "unsupported_format": ErrorCode.UNSUPPORTED_FORMAT,
+    "parse_failed": ErrorCode.PARSE_FAILED,
+    "internal_error": ErrorCode.INTERNAL_ERROR,
+}
 
 
 # --- contracts ---------------------------------------------------------------
@@ -173,102 +154,40 @@ class TableCommitOutput(Contract):
 
 
 def _cell_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, datetime):
-        if value.hour == 0 and value.minute == 0 and value.second == 0 and value.microsecond == 0:
-            return value.date().isoformat()
-        return value.isoformat(sep=" ", timespec="seconds")
-    if isinstance(value, date):
-        return value.isoformat()
-    if isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    return str(value).strip()
+    return tables.cell_str(value)
 
 
 def _trim_row(cells: list[str]) -> list[str]:
-    while cells and cells[-1] == "":
-        cells.pop()
-    return cells
+    return tables.trim_row(cells)
 
 
 def _trim_trailing_empty_rows(rows: list[list[str]]) -> list[list[str]]:
-    while rows and not rows[-1]:
-        rows.pop()
-    return rows
+    return tables.trim_trailing_empty_rows(rows)
 
 
 def _decode_csv(data: bytes) -> str:
-    if b"\x00" in data:
-        raise _err(ErrorCode.PARSE_FAILED, "CSV 文件包含空字节，无法按文本解析")
-    for encoding in ("utf-8-sig", "utf-8", "gb18030"):
-        try:
-            return data.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    raise _err(ErrorCode.PARSE_FAILED, "无法以 UTF-8 或 GB18030 解码 CSV 文件")
+    return _from_package(tables.decode_csv, data)
 
 
-_MAX_IMPORT_ROWS = 50_000
+_MAX_IMPORT_ROWS = tables._MAX_IMPORT_ROWS
 
 
 def _extract_sheet_rows(sheet: Any) -> list[list[str]]:
-    rows: list[list[str]] = []
-    for idx, row in enumerate(sheet.iter_rows(values_only=True)):
-        if idx >= _MAX_IMPORT_ROWS:
-            raise _err(ErrorCode.INVALID_INPUT, f"表格行数超过 {_MAX_IMPORT_ROWS} 行上限，请拆分后导入")
-        rows.append(_trim_row([_cell_str(value) for value in row]))
-    return _trim_trailing_empty_rows(rows)
+    return _from_package(tables.extract_sheet_rows, sheet)
+
+
+def _from_package(fn, *args, **kwargs):
+    """把独立包的 ``ParseError`` 精确转回工作台 ``WorkbenchError``（消息不变）。"""
+    try:
+        return fn(*args, **kwargs)
+    except ParseError as exc:
+        code = _PARSE_CODE_MAP.get(exc.code, ErrorCode.INTERNAL_ERROR)
+        details = {key: value for key, value in exc.details.items() if key != "reason"}
+        raise _err(code, exc.message, **details) from exc
 
 
 def _read_table_rows(data: bytes, suffix: str, sheet_name: str | None) -> tuple[list[str], str, list[list[str]]]:
-    if len(data) > MAX_IMPORT_BYTES:
-        raise _err(ErrorCode.INVALID_INPUT, "表格文件超过 10 MB，请先裁剪或分拆", size=len(data))
-    suffix = suffix.lower()
-    if suffix not in TABLE_SUFFIXES:
-        raise _err(ErrorCode.UNSUPPORTED_FORMAT, "仅支持 .xlsx / .csv 表格导入关系图", suffix=suffix)
-    chosen = (sheet_name or "").strip() or None
-    if suffix == ".csv":
-        if chosen is not None and chosen != "CSV":
-            raise _err(ErrorCode.INVALID_INPUT, f"CSV 文件不存在工作表：{chosen}", sheet_name=chosen)
-        text = _decode_csv(data)
-        first_line = next((line for line in text.splitlines() if line.strip()), "")
-        delimiter = ","
-        if "," not in first_line:
-            if "\t" in first_line:
-                delimiter = "\t"
-            elif ";" in first_line:
-                delimiter = ";"
-        try:
-            reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
-            rows = [_trim_row([str(cell).strip() for cell in row]) for row in reader]
-        except csv.Error as exc:
-            raise _err(ErrorCode.PARSE_FAILED, "无法解析 CSV 文件") from exc
-        rows = _trim_trailing_empty_rows(rows)
-        if not any(rows):
-            raise _err(ErrorCode.UNSUPPORTED_FORMAT, "CSV 中没有可读取的表格")
-        return ["CSV"], "CSV", rows
-
-    try:
-        workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
-    except Exception as exc:
-        raise _err(ErrorCode.PARSE_FAILED, "无法读取 XLSX 文件") from exc
-    try:
-        sheets = [sheet.title for sheet in workbook.worksheets]
-        if not sheets:
-            raise _err(ErrorCode.UNSUPPORTED_FORMAT, "XLSX 中没有工作表")
-        if chosen is not None:
-            if chosen not in workbook.sheetnames:
-                raise _err(ErrorCode.INVALID_INPUT, f"工作表不存在：{chosen}",
-                           sheet_name=chosen, sheets=sheets)
-            return sheets, chosen, _extract_sheet_rows(workbook[chosen])
-        for sheet in workbook.worksheets:
-            rows = _extract_sheet_rows(sheet)
-            if any(rows):
-                return sheets, sheet.title, rows
-        raise _err(ErrorCode.UNSUPPORTED_FORMAT, "XLSX 中没有可读取的表格")
-    finally:
-        workbook.close()
+    return _from_package(tables.read_table_rows, data, suffix, sheet_name)
 
 
 def _material_table_bytes(session: Session, storage: Storage, case_id: UUID,
@@ -307,86 +226,28 @@ def _norm_name(value: str) -> str:
 
 
 def _infer_entity_kind(name: str) -> str:
-    normalized = normalize_with_map(name)[0].strip()
-    lowered = normalized.lower()
-    if any(token in normalized for token in _ORG_CONTAINS):
-        return "org"
-    stripped = _TRAILING_PAREN_RE.sub("", lowered).strip()
-    for candidate in (lowered, stripped):
-        if any(candidate.endswith(suffix) for suffix in _ORG_SUFFIXES):
-            return "org"
-    return "person"
+    return tables.infer_entity_kind(name)
 
 
 def _normalize_currency(raw: str, fallback: str | None) -> str | None:
-    text = normalize_with_map(raw)[0].strip()
-    if not text:
-        return fallback
-    alias = _CURRENCY_ALIASES.get(text) or _CURRENCY_ALIASES.get(text.upper())
-    if alias is not None:
-        return alias
-    if _CURRENCY_CODE_RE.fullmatch(text):
-        return text.upper()
-    return None
+    return tables.normalize_currency(raw, fallback)
 
 
 def _detect_inline_currency(raw: str) -> str | None:
-    normalized = normalize_with_map(raw)[0]
-    for pattern, code in _INLINE_CURRENCY_PATTERNS:
-        if pattern.search(normalized):
-            return code
-    return None
+    return tables.detect_inline_currency(raw)
 
 
 def _parse_amount_cents(raw: str) -> tuple[int, bool]:
-    """Parse monetary text using Decimal only; returns (abs_cents, is_negative)."""
-    normalized = normalize_with_map(raw)[0].strip()
-    cleaned = _CURRENCY_TOKEN_RE.sub("", normalized)
-    if not cleaned or not _DECIMAL_RE.fullmatch(cleaned):
-        raise ValueError(f"无法解析金额：{raw}")
-    try:
-        amount = Decimal(cleaned)
-        if not amount.is_finite() or abs(amount) > Decimal("9000000000000"):
-            raise ValueError(f"无法解析金额：{raw}")
-        is_negative = amount < 0
-        quantized = abs(amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        cents = int(quantized * 100)
-    except (InvalidOperation, ArithmeticError, OverflowError, ValueError) as exc:
-        raise ValueError(f"无法解析金额：{raw}") from exc
-    return cents, is_negative
+    """Parse monetary text using Decimal only; returns ``(abs_cents, is_negative)``."""
+    return tables.parse_amount_cents(raw)
 
 
 def _parse_share_pct(raw: str) -> float:
-    normalized = normalize_with_map(raw)[0].strip()
-    if normalized.endswith("%"):
-        normalized = normalized[:-1].strip()
-    if not normalized or not _DECIMAL_RE.fullmatch(normalized):
-        raise ValueError(f"无法解析持股比例：{raw}")
-    try:
-        pct = Decimal(normalized)
-    except InvalidOperation as exc:
-        raise ValueError(f"无法解析持股比例：{raw}") from exc
-    if not pct.is_finite() or pct < Decimal(0) or pct > Decimal(100):
-        raise ValueError(f"持股比例超出 0..100 范围：{raw}")
-    return float(pct)
+    return tables.parse_share_pct(raw)
 
 
 def _parse_date(raw: str) -> date | None:
-    text = normalize_with_map(raw)[0].strip()
-    if not text:
-        return None
-    for pattern in (_DATE_SEP_RE, _DATE_COMPACT_RE):
-        match = pattern.match(text)
-        if not match:
-            continue
-        year, month, day = (int(part) for part in match.groups())
-        if pattern is _DATE_COMPACT_RE and not (1900 <= year <= 2100):
-            continue
-        try:
-            return date(year, month, day)
-        except ValueError:
-            return None
-    return None
+    return tables.parse_date(raw)
 
 
 def _cell_at(row: list[str], col: int | None) -> str:

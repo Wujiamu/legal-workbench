@@ -755,6 +755,94 @@
         }
       }
     },
+    "/api/v1/modules": {
+      "get": {
+        "operationId": "list_modules",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModulesOutput"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cases/{case_id}/metadata": {
       "patch": {
         "operationId": "update_case_metadata",
@@ -26743,6 +26831,39 @@
           "created_at"
         ],
         "title": "MaterialSummary",
+        "type": "object"
+      },
+      "ModulesOutput": {
+        "additionalProperties": false,
+        "description": "Enabled/optional module surfaces of this installation (read-only).",
+        "properties": {
+          "enabled_modules": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Enabled Modules",
+            "type": "array"
+          },
+          "all_modules": {
+            "items": {
+              "type": "string"
+            },
+            "title": "All Modules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled_modules",
+          "all_modules"
+        ],
+        "title": "ModulesOutput",
+        "type": "object"
+      },
+      "ModulesQuery": {
+        "additionalProperties": false,
+        "description": "GET /modules takes no input; placeholder for the protocol generator.",
+        "properties": {},
+        "title": "ModulesQuery",
         "type": "object"
       },
       "MoveEvidenceItemInput": {

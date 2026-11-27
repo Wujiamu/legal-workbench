@@ -25,10 +25,11 @@ from ..schemas import (
     UpdateRelationInput, UpsertGroupInput,
 )
 from ..storage import Storage
-from .deps import Guarded, get_db, get_storage
+from .deps import Guarded, get_db, get_storage, require_module
 from .ids import uuid_of
 
-router = APIRouter(prefix="/api/v1", tags=["graph"], dependencies=[Guarded])
+router = APIRouter(prefix="/api/v1", tags=["graph"],
+                   dependencies=[Guarded, Depends(require_module("graph"))])
 
 ACTOR = "human"
 ENTRY = "local-web"

@@ -11,11 +11,11 @@ from ..schemas import (
     ListAnnotationsOutput, ReviewAnnotationInput,
 )
 from ..storage import Storage
-from .deps import Guarded, get_db, get_storage
+from .deps import Guarded, get_db, get_storage, require_module
 from .ids import uuid_of
 
-router = APIRouter(prefix="/api/v1/cases/{case_id}/annotations",
-                   tags=["annotations"], dependencies=[Guarded])
+router = APIRouter(prefix="/api/v1/cases/{case_id}/annotations", tags=["annotations"],
+                   dependencies=[Guarded, Depends(require_module("notes"))])
 
 
 @router.get("", response_model=ListAnnotationsOutput)

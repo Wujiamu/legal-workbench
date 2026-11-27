@@ -17,9 +17,10 @@ from ..schemas import (
     UnlinkInput, UpdateNodeInput,
 )
 from .ids import uuid_of
-from .deps import Guarded, get_db
+from .deps import Guarded, get_db, require_module
 
-router = APIRouter(prefix="/api/v1", tags=["progress"], dependencies=[Guarded])
+router = APIRouter(prefix="/api/v1", tags=["progress"],
+                   dependencies=[Guarded, Depends(require_module("progress"))])
 
 ACTOR = "human"
 ENTRY = "local-web"

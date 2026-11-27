@@ -10,10 +10,11 @@ from ..schemas import (GetAnalysisOutput, GetAnalysisVersionOutput, ListAnalyses
                        ListAnalysisVersionsOutput, ReviewAnalysisInput, ReviewAnalysisOutput,
                        SaveAnalysisInput, SaveAnalysisOutput)
 from ..storage import Storage
-from .deps import Guarded, get_db, get_storage
+from .deps import Guarded, get_db, get_storage, require_module
 from .ids import uuid_of
 
-router = APIRouter(prefix="/api/v1/cases/{case_id}", tags=["analysis"], dependencies=[Guarded])
+router = APIRouter(prefix="/api/v1/cases/{case_id}", tags=["analysis"],
+                   dependencies=[Guarded, Depends(require_module("notes"))])
 
 
 def _match(path_value: str, body_value, field: str) -> None:

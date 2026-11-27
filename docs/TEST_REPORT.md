@@ -6,20 +6,22 @@
 
 | 项目 | 结果 |
 |---|---|
-| 最近全量通过 | **1206 项**（后端真实 PG18 全量 **792 passed, 1 skipped**，唯一 skip 为仅限真 Windows 的 `test_real_windows_ntfs_junction_rejected` ＋ **前端 58 文件 414 passed**，含 `theme.test.tsx`，`tsc --noEmit && vite build` 通过） |
+| 2026-11-27 模块化拆分与三项实机烟测 | 后端＋两独立包全量 **877 passed, 1 skipped**（`test_dossier_standalone.py` 20 项、`test_parse_standalone.py` 32 项；唯一 skip 为真 Windows NTFS Junction 用例），`modules.py` 延迟导入修复后受影响 10 个测试集复测 **238 passed**（含 `test_modular_phase1.py` 29 项）＋前端 **59 文件 421 passed**（新增 `modules.test.tsx` 7 项，`tsc --noEmit && vite build` 通过）；`plainfolio-dossier` 与 `plainfolio-parse` 零数据库隔离安装验收通过；PyInstaller `6.22.3` 真实冻结构建与冻结态 CLI/MCP 烟测、三插件 `run-mcp.py` 真实 stdio + Codex 隔离市场安装 4 插件、隔离库 Chromium 浏览器模块开关实测全部通过（本地留证 `docs/reports/20261127-模块化拆分与按需分发实机烟测.md`），见 [变更单](changes/20261127-模块化拆分与按需分发架构.md) |
+| 2026-11-25 增量与门禁 | 导出标准元数据（`test_dossier_export.py` **7 passed**、前端 `exportSvg.test.ts` & `exportClaimsSvg.test.ts` **12 passed**）、跨平台打包回归（`test_packaging_runtime.py` **43 passed**）、仓库卫生门禁（`test_repo_hygiene.py` **4 passed**）；GitHub Actions Run `45628787812` 双平台冻结烟测通过（实时精确条目数以实跑 `pytest` / `npm test` 为准） |
+| 2026-11-25 基准全量 | **1206 项**（后端真实 PG18 全量 **792 passed, 1 skipped**，唯一 skip 为仅限真 Windows 的 `test_real_windows_ntfs_junction_rejected` ＋ **前端 58 文件 414 passed**，含 `theme.test.tsx`，`tsc --noEmit && vite build` 通过） |
 | Agent 访问硬围栏（2026-11-25） | 新增 `test_agent_access_gate.py` **58 项**：默认锁死、52 个带 `case_id` 工具的反射审计、无授权写工具断言、`allowlist` 单案隔离与分页不泄露、`create_case` 默认拒绝、策略文件降级与 `0600`、`scripts/lwb agent-*` 五命令闭环与打包态 `--run-cli` 通路、`LWB_MCP_ALLOWED_CASES` / `LWB_MCP_ACCESS_MODE` 覆盖、真实 stdio 握手。本轮受影响 7 个测试集 **180 passed, 1 skipped**；四项反向验证均能检出对应缺陷。未在真实客户端跑会话，见 [变更单](changes/20261125-Agent访问硬围栏与授权收紧.md) |
 | 素章品牌与五套主题切换（2026-11-24） | 前端新增 `src/ui/theme.test.tsx`（4 项：`AppBrand` 渲染「素章」、5 套主题切换同步 DOM/`meta`/`localStorage`、跨标签页 `storage` 同步、`localStorage` 异常降级），`tsc --noEmit`、Vitest **58 文件 414 passed** 与 `vite build` 通过；`impeccable detect --json` 对 `workbench.css` / `BrandMark.tsx` / `theme.ts` 返回 `[]`（0 告警）；上传前双路独立代码审查并修复 DOCX 控制字符过滤、装卷提前释放 `FOR SHARE` 锁、CSV 公式注入防护、PDF 渲染失败保留原件、多帧容错与主题聚焦环对比度等问题后，受影响后端 7 个测试集（含新增 `test_dossier_export.py` 2 项回归）复测 **52 passed, 1 skipped** |
 | 数据库 | 真实 PostgreSQL 18（隔离验证），无 SQLite、无内存库 |
 | Windows 10/11 原生适配（2026-11-23） | 后端新增 `test_windows_compat.py`（8 项：Windows `PG_BIN`/`pg_env`、无 `SIGALRM` 线程超时、保留名/NTFS 路径守卫与真实 junction、脚本生命周期与 `lwb-launch` 锁/窗口/Browser/MessageBox、备份清单元/环境隔离）；前端新增 `src/ui/shortcuts.test.tsx`（2 项：`Win32` `Ctrl+Z` / `MacIntel` `⌘Z`）。经两轮独立代码审查闭环；`scripts/lwb doctor` 与 `generate_dossier` PDF 烟测通过；真实 Windows 宿主机实机验收按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 留作待办 |
 | `v0.1.0` 收尾与实机九项修复（2026-11-23） | 后端新增 `test_acceptance_fixes_20261123.py`（10 项全链路回归）与 `test_lwb_launch.py`（4 项断库恢复单测），前端新增 `CaseArchiveUiGuards.test.tsx`、`GraphCanvas.test.tsx` 等；两轮独立代码审查签收闭环；正式 `127.0.0.1:8765` 升级后 `check-consistency`（`ok: true`）、CLI/服务只读与拒写、内置 Chromium 四页实机复测通过 |
-| 图表程序化与对外引用验收（2026-11-22） | 后端新增 `test_chart_export.py`、`test_graph_assist.py`、`test_graph_assist_audit.py`、`test_table_graph_import.py`、`test_chart_assist_transports.py`，前端新增 `ChartExportDialog.test.tsx`、`CoverageMatrix.test.tsx`、`SendToGraphDialog.test.tsx`、`GraphAuditDrawer.test.tsx`、`CaseGraphWorkspaceAssist.test.tsx`、`exportSvg.test.ts`、`httpExecutor.test.ts` 等；AC10 外部复核实测检出 3 类预设错误、AC12 前后端独立双审闭环、Chromium 隔离两轮 E2E 通过（含 `save_layout` 修复复测），正式应用后 `check-consistency`（`ok: true`）及只读 HTTP 验收通过。Safari 实机未测、真实案件尚未试用。见 [图表程序化能力验收与正式应用](reports/20261122-图表程序化能力验收与正式应用.md) |
-| 联合回归与后续专项 | 后端全量后新增独立材料绑定保护，证据目录及关系图定向 65 项通过。前端全量、TypeScript 检查及生产构建通过。见 [整改复测](reports/20261122-P5联合隔离验收.md#2026-11-22-整改复测) |
-| 最新正式升级验收 | 2026-11-22 从 `0006_case_archive_time` 迁移到 `0008_claim_amounts`，正式服务只读复核通过。见 [备份与升级记录](reports/20261122-P5联合隔离验收.md#p6-正式升级与只读验收)和[隔离恢复演练](reports/20261122-P5联合隔离验收.md#联合测试及演练) |
+| 图表程序化与对外引用验收（2026-11-22） | 后端新增 `test_chart_export.py`、`test_graph_assist.py`、`test_graph_assist_audit.py`、`test_table_graph_import.py`、`test_chart_assist_transports.py`，前端新增 `ChartExportDialog.test.tsx`、`CoverageMatrix.test.tsx`、`SendToGraphDialog.test.tsx`、`GraphAuditDrawer.test.tsx`、`CaseGraphWorkspaceAssist.test.tsx`、`exportSvg.test.ts`、`httpExecutor.test.ts` 等；AC10 外部复核实测检出 3 类预设错误、AC12 前后端独立双审闭环、Chromium 隔离两轮 E2E 通过（含 `save_layout` 修复复测），正式应用后 `check-consistency`（`ok: true`）及只读 HTTP 验收通过。Safari 实机未测、真实案件尚未试用。见 图表程序化能力验收与正式应用（本地归档 `docs/reports/20261122-图表程序化能力验收与正式应用.md`） |
+| 联合回归与后续专项 | 后端全量后新增独立材料绑定保护，证据目录及关系图定向 65 项通过。前端全量、TypeScript 检查及生产构建通过。见 整改复测（本地归档 `docs/reports/20261122-P5联合隔离验收.md`） |
+| 最新正式升级验收 | 2026-11-22 从 `0006_case_archive_time` 迁移到 `0008_claim_amounts`，正式服务只读复核通过。见 备份与升级记录（本地归档 `docs/reports/20261122-P5联合隔离验收.md`）和隔离恢复演练（本地归档 `docs/reports/20261122-P5联合隔离验收.md`） |
 | 诉讼 UI 验收 | 独立 Chromium 连接合成案卷服务，见 [重构验收](changes/20261114-诉讼工作台UI重构.md) |
-| V0.1 端到端验收 | `scripts/run_acceptance.py`，13 项判定全部通过（见 [本轮 T19 实测](reports/T19-修复验收实测-20261113.md)） |
-| 备份恢复演练 | `scripts/rehearse_backup_restore.py`，真实 `pg_dump`/`pg_restore`，恢复后重新检索命中；2026-11-20 扩展覆盖 0006（归档案件与工时记录往返），见 [P5 隔离验收与恢复演练](reports/20261120-P5隔离验收与恢复演练.md) |
-| 生产升级验收 | 2026-11-20 `0004_case_workbench → 0006_case_archive_time` 后只读验收：`/api/v1/progress/rules` 200、案件概览含 `active_stages`/`archived_at`、进度快照 6 个默认节点、`/` 下发的 `index.html` 与构建产物 sha256 一致、Chromium 打开进度页正常且工时/结案归档入口可见；未做业务写入。见 [P6 正式升级与验收](reports/20261120-P6正式升级与验收.md) |
-| P6 后验收 | 2026-11-20 对尚未验收部分实测：全量回归重跑、T19 13 项判定通过（修复脚本端口隔离缺陷后）、备份恢复演练 OK、正式服务 8765 上归档/工时/进度/关联/撤销/徽标/回收站端到端（TEST-ONLY 案件）；发现并修复图形视图父节点顺序缺陷（D1），重建应用后零重叠。见 [P6 后验收实测记录](reports/20261120-P6后验收实测记录.md) |
+| V0.1 端到端验收 | `scripts/run_acceptance.py`，13 项判定全部通过（见 本轮 T19 实测（本地归档 `docs/reports/T19-修复验收实测-20261113.md`）） |
+| 备份恢复演练 | `scripts/rehearse_backup_restore.py`，真实 `pg_dump`/`pg_restore`，恢复后重新检索命中；2026-11-20 扩展覆盖 0006（归档案件与工时记录往返），见 P5 隔离验收与恢复演练（本地归档 `docs/reports/20261120-P5隔离验收与恢复演练.md`） |
+| 生产升级验收 | 2026-11-20 `0004_case_workbench → 0006_case_archive_time` 后只读验收：`/api/v1/progress/rules` 200、案件概览含 `active_stages`/`archived_at`、进度快照 6 个默认节点、`/` 下发的 `index.html` 与构建产物 sha256 一致、Chromium 打开进度页正常且工时/结案归档入口可见；未做业务写入。见 P6 正式升级与验收（本地归档 `docs/reports/20261120-P6正式升级与验收.md`） |
+| P6 后验收 | 2026-11-20 对尚未验收部分实测：全量回归重跑、T19 13 项判定通过（修复脚本端口隔离缺陷后）、备份恢复演练 OK、正式服务 8765 上归档/工时/进度/关联/撤销/徽标/回收站端到端（TEST-ONLY 案件）；发现并修复图形视图父节点顺序缺陷（D1），重建应用后零重叠。见 P6 后验收实测记录（本地归档 `docs/reports/20261120-P6后验收实测记录.md`） |
 | 测试数据 | 全部为脚本生成的 TEST-ONLY 虚构内容 |
 
 测试库每个 session 用真实 Alembic 迁移重建，不是 `create_all`，因此迁移本身也在被验证。
@@ -57,7 +59,8 @@
 | `test_cli_mcp.py` | 9 | CLI 建案/列案 JSON、错误退出码 2、完整链路、分析保存审核、输出不含密钥、真实 MCP `stdio_client` 往返、跨案拒绝（文件级 `agent_access_open` 夹具显式放开访问围栏，围栏本身由 `test_agent_access_gate.py` 覆盖） |
 | `test_agent_access_gate.py` | 58 | 默认锁死（14 个代表性工具 + 52 工具反射审计）、无授权写工具、`allowlist` 单案隔离与分页不泄露全库、`create_case` 默认拒绝、策略文件降级/`0600`/无凭据、`scripts/lwb agent-*` 五命令与打包态 `--run-cli` 通路、环境变量覆盖、真实 stdio 握手 |
 | `test_plugin_package.py` | 58 | 插件清单与市场目录、无本机路径、Skill 镜像逐字一致、五份 Skill 的「授权前置与硬围栏纪律」前置与关键词、README 不再指向已移除的 DSH 插件 |
-| `test_packaging_runtime.py` | 42 | 打包态与源码态路径解析、内嵌 PG18/OCR 优先探测、冻结入口自复用命令、首次自动初始化与失败清理、升级前全量备份与失败中止、`stage_bundle.py` / `build_macos_dmg.py --dry-run` / `build_windows_exe.py --dry-run`、`.iss` 卸载保留数据目录、`.gitignore` 守护 |
+| `test_packaging_runtime.py` | 43 | 打包态与源码态路径解析、内嵌 PG18/OCR 优先探测、冻结入口自复用命令、首次自动初始化与失败清理、Windows `_mkdir_private` 回归、升级前全量备份与失败中止、`stage_bundle.py` / `build_macos_dmg.py --dry-run` / `build_windows_exe.py --dry-run`、`.iss` 卸载保留数据目录、`.gitignore` 守护 |
+| `test_repo_hygiene.py` | 4 | 仓库卫生硬门禁：已追踪 `.md` 站内链接存在且不指向 gitignore 本地目录、5 处版本清单一致、`pyproject.toml` 主依赖均已写入 `REUSE.md`、`NEXT_STEPS.md` 活跃变更单未滞留已封板/废弃条目 |
 | `test_case_metadata.py` | 4 | `0009_case_metadata` 迁移升降级、首页案号/原被告/5 档办理状态读写与 CAS 冲突、筛选排序及归档只读保护 |
 | `test_dossier_export.py` | 7 | 法院标准双场景卷宗 ZIP 导出：A4 横竖混排与装订线、封面与目录自动带入 `0009` 案号原被告、加密/损坏 PDF 容错、DOCX/XLSX 提示页、电子立案分项裁切与已归档只读导出 |
 | `test_backup_consistency.py` | 23 | 一致性检查各故障类型、备份清单与哈希、备份期间源变化失败、`INCOMPLETE` 拒绝恢复、越界路径拒绝、空环境恢复往返、非空目标拒绝、维护标志阻断与解除、工作副本纳入备份 |
@@ -74,7 +77,7 @@
 
 ## 前端测试
 
-`frontend` 使用 Vitest CLI、jsdom 和 Testing Library，截至 2026-11-24 共 **414 项**（58 个测试文件；除下方历史逐文件清单外，后续新增关系图/证据目录/诉请金额/图表程序化/跨平台快捷键 `src/ui/shortcuts.test.tsx`、多主题切换 `src/ui/theme.test.tsx`、首页元信息筛选与归档切换及共享导航 `?view=` 同步等回归见 `CaseArchiveUiGuards.test.tsx`、`CasesPage.test.tsx`、`GraphCanvas.test.tsx` 与 `CHANGELOG.md`；本机历史报告归档于 `docs/reports/` 不随开源仓库分发）：
+`frontend` 使用 Vitest CLI、jsdom 和 Testing Library，截至 2026-11-27 共 **421 项**（59 个测试文件；除下方历史逐文件清单外，后续新增关系图/证据目录/诉请金额/图表程序化/跨平台快捷键 `src/ui/shortcuts.test.tsx`、多主题切换 `src/ui/theme.test.tsx`、模块开关 `src/modules.test.tsx` 7 项、首页元信息筛选与归档切换及共享导航 `?view=` 同步等回归见 `CaseArchiveUiGuards.test.tsx`、`CasesPage.test.tsx`、`GraphCanvas.test.tsx` 与 `CHANGELOG.md`；本机历史报告归档于 `docs/reports/` 不随开源仓库分发）：
 
 | 文件 | 条数 | 覆盖内容 |
 |---|---|---|
@@ -115,7 +118,7 @@
 
 独立 Chromium 使用构建产物和合成 API 响应验证分段输入事件、正常回车和按钮检索、材料标签聚焦与保存、导入提示关联及 1440px 和 760px 布局。在本机运行实例只读验证服务已加载新构建、案件工作表和新建案件入口正常显示。macOS 真实输入法、Safari 和真实案卷仍待验。
 
-2026-11-20 P5 隔离验收：隔离实例（副本源码＋独立库 `legal_workbench_p5`＋独立构建，端口 8799）上，Chromium（Browser Use CLI）与 WebKit（Playwright 1.65.1）各跑完整流程——树渲染、开始/停止计时、日视图 0.25h、按标题汇总、结案归档、归档后进度写入被拦、工时只读、取消归档后写入恢复，两引擎均无页面脚本错误；截图在 `reports/p5-20261120/`。**Safari 实机未完成**（需在 Safari 设置→开发者勾选「允许远程自动化」或「允许 JavaScript 来自 Apple 事件」），以 WebKit 引擎结果替代，不等同 Safari 实机。详见 [P5 隔离验收与恢复演练](reports/20261120-P5隔离验收与恢复演练.md)。
+2026-11-20 P5 隔离验收：隔离实例（副本源码＋独立库 `legal_workbench_p5`＋独立构建，端口 8799）上，Chromium（Browser Use CLI）与 WebKit（Playwright 1.65.1）各跑完整流程——树渲染、开始/停止计时、日视图 0.25h、按标题汇总、结案归档、归档后进度写入被拦、工时只读、取消归档后写入恢复，两引擎均无页面脚本错误；截图在 `reports/p5-20261120/`。**Safari 实机未完成**（需在 Safari 设置→开发者勾选「允许远程自动化」或「允许 JavaScript 来自 Apple 事件」），以 WebKit 引擎结果替代，不等同 Safari 实机。详见 P5 隔离验收与恢复演练（本地归档 `docs/reports/20261120-P5隔离验收与恢复演练.md`）。
 
 ## 关键验证点
 

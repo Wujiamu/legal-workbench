@@ -15,6 +15,7 @@ import type { CoverageMatrixFilter } from '../components/CoverageMatrix';
 import { MaterialDetail } from '../components/MaterialDetail';
 import { UploadPanel } from '../components/UploadPanel';
 import { AnalysisPanel, SearchPage } from '../components/SearchPanel';
+import { isModuleEnabled, useEnabledModules } from '../modules';
 import { Button, EmptyState, ErrorState, LoadingState, StatusText } from '../ui/primitives';
 import { formatTimestamp } from '../ui/time';
 import { palette, radius, spacing, fontStack } from '../ui/tokens';
@@ -84,6 +85,21 @@ function CaseWorkspace({ caseId }: { caseId: string }) {
       setTab((current) => (current === view ? current : view));
     }
   }, [searchParams]);
+  const enabledModules = useEnabledModules();
+  // notes 模块关闭时「分析」「标注复核」两个页签既不显示，也不能被 ?view= 直接
+  // 打开：回落到材料页并把 URL 一起改掉，否则刷新后又回到禁用页。`?ref=` 指向
+  // 检索页，与该回落无关，不会被误覆写。
+  useEffect(() => {
+    if (isModuleEnabled(enabledModules, 'notes') || (tab !== 'analysis' && tab !== 'annotations')) {
+      return;
+    }
+    setTab('material');
+    setSearchParams((current) => {
+      const nextParams = new URLSearchParams(current);
+      nextParams.set('view', 'material');
+      return nextParams;
+    }, { replace: true });
+  }, [enabledModules, tab, setSearchParams]);
   const [overview, setOverview] = useState<CaseOverview | null>(null);
   const [overviewError, setOverviewError] = useState('');
   const [reloadOverview, setReloadOverview] = useState(0);

@@ -14,10 +14,11 @@ from .. import time_entries
 from ..errors import ErrorCode, WorkbenchError
 from ..schemas import (AddTimeEntryInput, RemoveTimeEntryInput, StartTimerInput,
                        StopTimerInput, TimeDayOutput, TimeEntryOut)
-from .deps import Guarded, get_db
+from .deps import Guarded, get_db, require_module
 from .ids import uuid_of
 
-router = APIRouter(prefix="/api/v1", tags=["time"], dependencies=[Guarded])
+router = APIRouter(prefix="/api/v1", tags=["time"],
+                   dependencies=[Guarded, Depends(require_module("time"))])
 
 def _check_case(path_value: str, body_value) -> None:
     if uuid_of(path_value, "case_id") != body_value:

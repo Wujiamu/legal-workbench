@@ -2,8 +2,7 @@
 
 > 适用基线：`v0.1.0` + `0009_case_metadata`（承接 [通用 Agent 插件包](changes/20261124-通用Agent插件包.md)）。
 >
-> **当前状态：代码与干跑验证已完成，尚未在真机构建和安装过任何一个安装包。**
-> 本文第 8 节的自检清单全部为**待执行**；第 10 节列出因此尚未验证的具体风险。
+> 本文说明打包形态、目录布局、构建流程与实机自检清单；当前构建与真机验收进度统一见 [NEXT_STEPS.md](NEXT_STEPS.md)。仓库已配置 `.github/workflows/release-installers.yml` 自动产出未签名的双端安装包与 SHA-256 校验文件。
 
 ## 1. 两种运行形态
 
@@ -60,6 +59,7 @@
 - Python **3.13**（与 `backend/pyproject.toml` 的 `requires-python` 一致）。
 - Node.js **22.22.2+ / 24.15.0+ / 26+** 与 `npm`（构建前端）。
 - PyInstaller 6.x：`backend/.venv/bin/pip install pyinstaller`（仅构建机需要，**不写入** `pyproject.toml` / `uv.lock`）。
+- 仓库内第一方独立包（`packages/plainfolio-dossier`、`packages/plainfolio-parse`）：桌面端由 [plainfolio.spec](../packaging/plainfolio.spec) 的 `pathex` 与 `hiddenimports` 随主包打入冻结产物；单独分发时可通过 `uv build --out-dir dist-packages packages/plainfolio-dossier` 与 `uv build --out-dir dist-packages packages/plainfolio-parse` 产出轻量 `.whl` / `.tar.gz`（`.github/workflows/release-installers.yml` 的 `build-packages` 任务同步上传 `plainfolio-python-packages` 产物）。
 - 外部二进制（便携 PostgreSQL 18、OCR 模型）由构建机自备，脚本只校验、不下载。
 
 macOS：
@@ -248,16 +248,18 @@ Windows：
 打包态下 `doctor` 不再把缺少 `node` / `npm` 判为失败（显示 `SKIP`），因为安装包自带构建产物；
 `BUNDLE_ROOT` / `HOME` / `PACKAGED` 三行用于确认解析到的是哪个目录。
 
-## 10. 尚未验证 / 已知限制
+## 10. 验证进展与已知限制
 
-1. **未真实构建**：本机未安装 PyInstaller，未产出 `.dmg` / `.exe`；`packaging/*.py` 只跑过 `--dry-run`。
-2. **`plainfolio.spec` 的收集清单未实测**：`rapidocr_onnxruntime` / `onnxruntime` / `pypdfium2`
-   的二进制与数据文件在真机上可能需要补 `hiddenimports` 或 `binaries`。
-3. **便携 PostgreSQL 18 的可重定位性未验证**（macOS 尤其），见 4.1。
-4. **`.iss` 未在 Inno Setup 中编译过**：模板结构与卸载安全规则由静态检查守护
-   （`test_packaging_runtime.py`），但真实编译依赖构建机的 `ChineseSimplified.isl`。
-5. **未签名、未公证**；Gatekeeper / SmartScreen 的真实提示未记录。
-6. **体积**：onedir + PG18 + ONNX 预计 300–500 MB，未实测。
-7. **安装包内的 MCP 派发**只在单元测试里用桩验证过，未在真实 Codex / DSH 客户端中跑通。
-8. 打包态的 `--stop` 通过进程号终止启动器；若启动器被强杀，`desktop-state.json` 会残留，
-   `--stop` 仍会停集群，残留文件在下次启动时被覆盖。
+已通过 CI 与本机实测确认：
+
+1. **GitHub Actions 双端真实构建与冻结烟测通过**（Run `45628787812`）：产出 `PlainFolio-Setup-0.1.0-x64.exe`（~140 MB）与 `PlainFolio-0.1.0-macos-arm64.dmg`（~343 MB）；`plainfolio.spec` 收集清单（`pypdfium2_raw`/`lxml`/`rapidocr`/前端与迁移）及 `--version`、`--init-only`、`--start-db`、`--run-doctor`、`--run-cli check-consistency`/`agent-status`、`--stop` 在 `windows-latest` 与 `macos-15` 全部通过；Windows `.iss` 与 `ChineseSimplified.isl` 已完成云端编译。
+2. **macOS `.dmg` 本机实测确认**：SHA-256、`arm64` 包体、内嵌 PG `18.3` 与 RapidOCR 模型完整性、隔离目录冻结 `--version`/`--status`/`run-mcp.py --print-plan` 均通过；`otool -L` 确认 `PlainFolio` 与内嵌 `postgres`/`initdb`/`psql`/`pg_ctl` 全部依赖系统库与 `@loader_path/../lib/...`，无 Homebrew 或构建机硬编码路径。
+3. **当前签名状态（实测记录）**：macOS `codesign -dvv` 为 `adhoc` 临时签名、`TeamIdentifier=not set`，`spctl` 不通过（未签名的 `.dmg` / `.exe` 会触发 Gatekeeper 与 SmartScreen 警告，详见第 7 节）。
+
+仍待实机验收：
+
+1. **干净 macOS 用户账户的图形化双击冷启动**（拖入 `/Applications` 后双击建库并自动打开浏览器，此前因宿主机 `55432` 端口被在跑开发库占用暂缓）。
+2. **真实中文 Windows 10/11 x64 普通用户宿主机安装与卸载测试**（见第 8 节 Windows 清单，含 CP936 与卸载保留 `%LOCALAPPDATA%\PlainFolio`）。
+3. **正式代码签名与公证**（未接入 Developer ID / Authenticode 证书）。
+4. **安装包内 MCP 派发在真实 Codex / DSH 客户端跑通完整会话**（目前仅在本机通过 `run-mcp.py --print-plan` 与云端 stdio 测试）。
+5. 打包态的 `--stop` 通过进程号终止启动器；若启动器被强杀，`desktop-state.json` 会残留，`--stop` 仍会停集群，残留文件在下次启动时被覆盖。
