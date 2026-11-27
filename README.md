@@ -14,6 +14,22 @@
 
 ---
 
+## 整套用，或按需单装：交给 AI Agent 部署即可开箱即用
+
+- **交给 Agent 部署，开箱即用**：不懂命令行也没关系——直接把本仓库地址交给你的 AI Agent（如 Codex、Claude Code、Antigravity 等），让它按本页安装指引完成环境准备与配置，装完即可直接开用；平时办案双击桌面图标或直接由 Agent 调用。
+- **不必替换你已有的工作台**：如果你已经在用 Obsidian、Notion、飞书或本地文件夹配合自己的 AI Agent，不需要为了用某项功能而迁入整套工作台——可以只挑下面需要的**零数据库独立模块**装进你的 Agent，也可以在完整工作台里通过模块开关裁剪页面与工具。
+
+| 选装方式 | 适用场景 | 说明与入口 |
+|---|---|---|
+| **独立法院装卷（`plainfolio-dossier`）** | 已有自己的工作台，仅需按中国法院规范自动装卷 | 零数据库；将本地材料目录装成 A4 合订 PDF（20mm 装订线、封面、精确页码目录、分隔页）、Word/CSV 目录与网上立案分项 ZIP（[插件说明](plugins/plainfolio-dossier/README.md)） |
+| **独立离线解析（`plainfolio-parse`）** | 已有 Obsidian / 本地目录，只想在本地读透 PDF、表格和扫描件 | 零数据库（OCR 可选装）；解析为可复核结构化正文 / Markdown，并扫描精确金额（按币种分账）、日期与跨文件强指纹碰撞（[插件说明](plugins/plainfolio-parse/README.md)） |
+| **通用法律 SOP（`plainfolio-legal-sops`）** | 只需非标流水算账与图表实质复核方法论 | 零代码、纯 Skill；提供非标银行流水 Python 算账规程与对外图表法律实质复核清单（[插件说明](plugins/plainfolio-legal-sops/README.md)） |
+| **完整工作台（`plainfolio`，支持模块裁剪）** | 需要一站式管理多案台账、查页对照、关系图、证据目录、诉请算账与工时 | 本机离线 PostgreSQL；支持通过 `LWB_ENABLED_MODULES` / `LWB_MCP_MODULES` 裁剪前端页面与 MCP 工具面（[插件说明](plugins/plainfolio/README.md) · [本地插件市场](.agents/plugins/marketplace.json)） |
+
+> **安全边界默认开启**：独立插件默认只允许访问**当前工作目录及其子目录**（需要跨目录时可用 `PLAINFOLIO_ALLOWED_ROOTS` 显式放行），原始文件只读锁定；整套工作台接入外部 Agent 时默认全拒绝（`deny_all`），须在本机按案显式授权后才可读。
+
+---
+
 ## 它能帮你把哪些耗时工作省下来？
 
 - **首页案件总台账（一眼看清轻重缓急）**：集中登记**案号、原被告、办理状态**（正常推进 / 待补材料 / 待沟通开会 / 待法院对方 / 暂缓中止）、当前节点与跨案期限时间轴；支持按关键词、状态、逾期/近 7 天期限快速筛选和排序，已结案件可随时归档只读封存。
@@ -29,30 +45,23 @@
 
 ## 实际操作长什么样？
 
-<table>
-  <tr>
-    <td width="50%" align="center">
-      <strong>1. 全格式案卷导入与本机离线识别</strong><br/>
-      <img src="docs/assets/demo-intake.gif" alt="全格式案卷导入本机与离线识别" width="100%" />
-    </td>
-    <td width="50%" align="center">
-      <strong>2. 按金额/关键字秒查并直达原件页码</strong><br/>
-      <img src="docs/assets/demo-search.gif" alt="精确检索并一键跳转原件页码" width="100%" />
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <strong>3. 主体关系梳理与跨材料强指纹防漏</strong><br/>
-      <img src="docs/assets/demo-graph.gif" alt="主体关系图与跨材料指纹核查" width="100%" />
-    </td>
-    <td width="50%" align="center">
-      <strong>4. 内部 / 客户 / 法庭三态导出与复核</strong><br/>
-      <img src="docs/assets/demo-export.gif" alt="一源三态导出与律师复核把关" width="100%" />
-    </td>
-  </tr>
-</table>
+### 1. 全格式案卷导入与本机离线识别
 
-> 想看完整 2 分钟全流程高清演示视频？可在 GitHub 仓库右侧 **Releases** 页面下载 `1080p` 演示视频直接观看（演示内容全部为虚构测试案例，无任何真实案件信息）。
+![全格式案卷导入本机与离线识别](docs/assets/demo-intake.gif)
+
+### 2. 按金额/关键字秒查并直达原件页码
+
+![精确检索并一键跳转原件页码](docs/assets/demo-search.gif)
+
+### 3. 主体关系梳理与跨材料强指纹防漏
+
+![主体关系图与跨材料指纹核查](docs/assets/demo-graph.gif)
+
+### 4. 内部 / 客户 / 法庭三态导出与复核
+
+![一源三态导出与律师复核把关](docs/assets/demo-export.gif)
+
+> 我们准备了完整 2 分钟全流程高清演示视频，可直接前往 [GitHub Releases](https://github.com/Wujiamu/PlainFolio/releases) 查看与下载（演示内容全部为虚构测试案例，无任何真实案件信息）。
 
 ---
 
@@ -62,14 +71,19 @@
 
 | 系统 | 日常启动方式 | 说明 |
 |---|---|---|
-| **macOS** | 双击根目录 **`法律工作台.app`** | 自带工作台图标，自动拉起本地服务与后台识别并在浏览器打开工作台 |
-| **Windows 10 / 11** | 双击根目录 **`法律工作台.bat`** | 无黑框后台静默启动；运行一次 `powershell -ExecutionPolicy Bypass -File scripts\create-windows-shortcut.ps1` 可生成带图标桌面快捷方式 |
+| **macOS** | 双击根目录 **`素章.app`** | 自带素章图标，自动拉起本地服务与后台识别并在浏览器打开素章 |
+| **Windows 10 / 11** | 双击根目录 **`素章.bat`** | 无黑框后台静默启动；运行一次 `powershell -ExecutionPolicy Bypass -File scripts\create-windows-shortcut.ps1` 可生成带图标桌面快捷方式 |
 
-> **小提示（Windows 用户）**：请把本工具和案卷数据放在本机普通硬盘分区（例如 `D:\案件工作台`，NTFS 格式），不要放到云盘同步目录或 U 盘中；如电脑存有敏感案件，建议同时开启系统自带磁盘加密（macOS FileVault / Windows BitLocker）。
+> **为什么必须放在本机固定硬盘里（不要放云盘或 U 盘）？**
+> 请将本工具与案卷数据直接放在本机固定硬盘分区中（Windows 须为 NTFS 分区，例如 `D:\案件工作台`）：
+> - **不要放到云盘同步目录**（如 OneDrive、iCloud、坚果云等）：同步客户端会在后台持续锁文件、上传正在写入中的本地数据库与索引文件，极易造成数据库损坏或生成冲突副本；
+> - **不要放到 U 盘或移动存储（及常见 FAT32 / exFAT 分区）**：读写稳定性差，电脑休眠、断电或误拔会直接损毁本地数据库与检索索引，且 exFAT / FAT32 不支持 Windows 无覆盖文件发布所需的 NTFS 同卷硬链接。
 
 ---
 
 ## 首次在本机安装准备
+
+> 不习惯敲命令的话，可直接把本仓库和下面对应系统的步骤交给你的 AI Agent（如 Codex、Claude Code、Antigravity 等）自动部署，完成后即可开箱即用。
 
 <details>
 <summary>点此展开：macOS / Windows 首次安装与初始化步骤（只需做一次）</summary>
@@ -87,7 +101,7 @@
    ```sh
    scripts/lwb init
    ```
-   完成后浏览器访问 `http://127.0.0.1:8765/`；以后日常使用只需双击 `法律工作台.app`。
+   完成后浏览器访问 `http://127.0.0.1:8765/`；以后日常使用只需双击 `素章.app`。
 
 ### Windows 10 / 11
 
@@ -99,7 +113,7 @@
    backend\.venv\Scripts\python.exe scripts\install_ocr_models.py
    scripts\lwb.cmd init
    ```
-   完成后即可通过 `http://127.0.0.1:8765/` 使用；以后日常只需双击 `法律工作台.bat`（详见 [Windows 检查清单](docs/WINDOWS_CHECKLIST.md)）。
+   完成后即可通过 `http://127.0.0.1:8765/` 使用；以后日常只需双击 `素章.bat`（详见 [Windows 检查清单](docs/WINDOWS_CHECKLIST.md)）。
 
 </details>
 

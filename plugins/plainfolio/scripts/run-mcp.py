@@ -53,8 +53,8 @@ TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 #: A packaged install is recognised by the desktop binary it ships.
 PACKAGED_MODE = "packaged"
-PACKAGED_EXE_NAMES = ("PlainFolio", "PlainFolio.exe", "法律工作台", "法律工作台.exe")
-PACKAGED_APP_NAMES = ("PlainFolio.app", "法律工作台.app")
+PACKAGED_EXE_NAMES = ("PlainFolio", "PlainFolio.exe", "素章", "素章.exe", "法律工作台", "法律工作台.exe")
+PACKAGED_APP_NAMES = ("PlainFolio.app", "素章.app", "法律工作台.app")
 PACKAGED_ARG = "--run-mcp"
 
 EXIT_LAUNCH_FAILED = 1

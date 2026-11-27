@@ -36,17 +36,17 @@ scripts\lwb.cmd doctor
 
 ---
 
-## 2. 桌面双击启动器与断库自愈（`法律工作台.bat`）
+## 2. 桌面双击启动器与断库自愈（`素章.bat`）
 
-- [ ] 确保 PostgreSQL、Web 与 Worker 均已停止，在资源管理器**双击项目根目录 `法律工作台.bat`**：
+- [ ] 确保 PostgreSQL、Web 与 Worker 均已停止，在资源管理器**双击项目根目录 `素章.bat`**：
   - [ ] 无长期滞留的黑色 CMD/控制台窗口，也不弹出多余后台 `pg_ctl` / `python` 窗口；
   - [ ] 45 秒内默认浏览器自动打开 `http://127.0.0.1:8765/`，首页渲染正常；
   - [ ] `var\runtime\launcher.log` 记录启动过程且中文正常（UTF-8）。
 - [ ] 模拟「网页进程仍在监听但数据库被停止」：
   1. 执行 `scripts\lwb.cmd stop` 仅停掉 PostgreSQL；
-  2. 再次双击 `法律工作台.bat`；
+  2. 再次双击 `素章.bat`；
   3. 确认无需手工重开 Web，启动器自动拉起 PostgreSQL 并补启解析 worker，最终打开可用首页，`launcher.log` 记有「尝试拉起 PostgreSQL 并恢复解析 worker」。
-- [ ] 连续快速双击两次 `法律工作台.bat`，确认 `msvcrt.locking` 排他锁阻止重复拉起冲突，仅打开单个可用服务实例。
+- [ ] 连续快速双击两次 `素章.bat`，确认 `msvcrt.locking` 排他锁阻止重复拉起冲突，仅打开单个可用服务实例。
 
 ---
 

@@ -104,7 +104,7 @@ def _notify_failure(message: str, log_path: Path) -> None:
         try:
             subprocess.run(
                 ["/usr/bin/osascript", "-e", "on run argv", "-e",
-                 'display alert "无法启动法律工作台" message (item 1 of argv) as critical',
+                 'display alert "无法启动素章" message (item 1 of argv) as critical',
                  "-e", "end run", message],
                 check=True, capture_output=True, timeout=10)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
@@ -113,7 +113,7 @@ def _notify_failure(message: str, log_path: Path) -> None:
     if _is_windows():
         try:
             import ctypes
-            ctypes.windll.user32.MessageBoxW(None, message, "无法启动法律工作台", 0x10)
+            ctypes.windll.user32.MessageBoxW(None, message, "无法启动素章", 0x10)
             return
         except Exception:
             if log_path.exists():

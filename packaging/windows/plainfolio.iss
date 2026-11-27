@@ -15,7 +15,7 @@
 #define AppDisplayName "素章 PlainFolio"
 #define AppExeName "PlainFolio.exe"
 #define AppPublisher "素章 PlainFolio"
-#define AppUrl "https://github.com/Wujiamu/legal-workbench"
+#define AppUrl "https://github.com/Wujiamu/PlainFolio"
 #ifndef AppVersion
   #define AppVersion "0.1.0"
 #endif

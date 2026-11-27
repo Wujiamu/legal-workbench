@@ -1,12 +1,12 @@
 ﻿$ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$Bat = Join-Path $Root "法律工作台.bat"
+$Bat = Join-Path $Root "素章.bat"
 $Icon = Join-Path $Root "scripts\legal-workbench.ico"
 $Desktop = [Environment]::GetFolderPath("Desktop")
 if ([string]::IsNullOrWhiteSpace($Desktop)) {
     throw "无法解析当前用户的桌面路径"
 }
-$Lnk = Join-Path $Desktop "法律工作台.lnk"
+$Lnk = Join-Path $Desktop "素章.lnk"
 
 if (-not (Test-Path $Bat)) {
     throw "未找到启动脚本：$Bat"

@@ -271,7 +271,7 @@ def test_lwb_launch_windows_lock_spawn_and_browser(monkeypatch, tmp_path):
     )
     monkeypatch.setitem(sys.modules, "ctypes", fake_ctypes)
     mod._notify_failure("测试失败", runtime / "launcher.log")
-    assert alerts == [(None, "测试失败", "无法启动法律工作台", 0x10)]
+    assert alerts == [(None, "测试失败", "无法启动素章", 0x10)]
 
 
 def test_backup_windows_pg_env_and_manifest_path_validation(monkeypatch, tmp_path):

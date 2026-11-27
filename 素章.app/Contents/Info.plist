@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>local.legal-workbench.launcher</string>
+    <string>local.plainfolio.launcher</string>
     <key>CFBundleName</key>
-    <string>法律工作台</string>
+    <string>素章</string>
     <key>CFBundleDisplayName</key>
-    <string>法律工作台</string>
+    <string>素章</string>
     <key>CFBundleExecutable</key>
     <string>launch-workbench</string>
     <key>CFBundleIconFile</key>

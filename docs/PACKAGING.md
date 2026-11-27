@@ -11,7 +11,7 @@
 | 程序目录 | 仓库根目录 | `.app` 内的 `Contents/MacOS`，或 `%LOCALAPPDATA%\Programs\PlainFolio`（只读） |
 | 数据目录 | 仓库根目录（`var/`、`.env`） | macOS `~/Library/Application Support/PlainFolio`；Windows `%LOCALAPPDATA%\PlainFolio` |
 | 解析顺序 | `LWB_HOME` → 实例指针 `home` → `ROOT` | `LWB_HOME` → 实例指针 `home` → 平台数据目录 |
-| 启动 | `scripts/lwb start` / 双击 `法律工作台.bat` / `scripts/lwb-launch` | 双击应用图标 → `legal_workbench.desktop_launcher` |
+| 启动 | `scripts/lwb start` / 双击 `素章.bat` / `scripts/lwb-launch` | 双击应用图标 → `legal_workbench.desktop_launcher` |
 | 子进程 | `python -m uvicorn …` / `-m legal_workbench.worker` | 同一可执行文件 `--run-server` / `--run-worker` |
 | MCP 入口 | `plugins/plainfolio/scripts/run-mcp.py` → `backend/.venv/bin/python -m legal_workbench.mcp_server` | 同一启动器 → `<可执行文件> --run-mcp` |
 | Agent 授权 | `scripts/lwb agent-*`（无依赖时自动转发到 `backend/.venv` 的 Python） | 安装目录里没有 `scripts/`：用 `<可执行文件> --run-cli agent-grant <case_id>`（同一份 `agent_access_cli` 实现）。策略文件落在平台数据目录下的 `var/runtime/agent-access.json` |

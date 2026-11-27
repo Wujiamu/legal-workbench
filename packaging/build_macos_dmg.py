@@ -38,7 +38,7 @@ EXIT_BUILD_FAILED = 3
 APP_BUNDLE = "PlainFolio.app"
 EXECUTABLE_NAME = "PlainFolio"
 BUNDLE_ID = "local.plainfolio.desktop"
-DEFAULT_ICON = Path("法律工作台.app") / "Contents" / "Resources" / "AppIcon.icns"
+DEFAULT_ICON = Path("素章.app") / "Contents" / "Resources" / "AppIcon.icns"
 
 
 def _parser() -> argparse.ArgumentParser:

@@ -111,7 +111,7 @@ Agent 通过 CLI 或 MCP 调用，进程在本机运行，读的是同一套数�
 ## 支持范围
 
 - 分发形态：源码态（现有方式）与桌面安装包（macOS `.dmg` / Windows `.exe`）。打包构建与验收现状见 [NEXT_STEPS.md](NEXT_STEPS.md)，打包架构与自检清单见 [PACKAGING.md](PACKAGING.md)。
-- 平台：macOS（Apple Silicon 已实机验证）；Windows 10/11 已完成跨平台代码适配、桌面与生命周期启动器（`法律工作台.bat` / `scripts/lwb.cmd`）、线程版 OCR 超时保护及模拟单测，待在真实 Windows 宿主机按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 执行实机验收；Linux 未验证。
+- 平台：macOS（Apple Silicon 已实机验证）；Windows 10/11 已完成跨平台代码适配、桌面与生命周期启动器（`素章.bat` / `scripts/lwb.cmd`）、线程版 OCR 超时保护及模拟单测，待在真实 Windows 宿主机按 [WINDOWS_CHECKLIST.md](WINDOWS_CHECKLIST.md) 执行实机验收；Linux 未验证。
 - 规模：单机单用户。实测 1000 文件 / 10000 页 / 33100 段落 / 120305 个精确值，索引 128 秒，检索 P95 415ms（单字扫描 545ms）。
 - 并发：单 worker 串行处理；多客户端可并发读，写走 CAS 与数据库锁。
 - 未覆盖：多用户、权限分级、跨机同步、云存储、加密静态数据、审计合规留存。

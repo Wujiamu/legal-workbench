@@ -26,7 +26,7 @@ description: 使用本机法律工作台 CLI 与同源 HTTP 上传入口查询�
 
 ## 1. 连通性与案件管理
 
-- **只读连通检查**：`list-cases --limit 0`（确认 PostgreSQL 在线，不拉取正式案件列表）。若数据库未运行，可先启动桌面「法律工作台.app」（Windows 为「法律工作台.bat」）或运行 `scripts/lwb start`（Windows 为 `scripts\lwb.cmd start`）后重试。
+- **只读连通检查**：`list-cases --limit 0`（确认 PostgreSQL 在线，不拉取正式案件列表）。若数据库未运行，可先启动桌面「素章.app」（Windows 为「素章.bat」）或运行 `scripts/lwb start`（Windows 为 `scripts\lwb.cmd start`）后重试。
 - **建案 / 列案 / 列材料 / 查覆盖**：
   - `create-case --title "案件名称"`
   - `list-cases --limit 20`

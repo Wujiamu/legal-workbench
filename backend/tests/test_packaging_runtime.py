@@ -905,7 +905,7 @@ def test_gitignore_keeps_build_artifacts_out_but_not_the_tracked_app_bundle():
         pytest.skip("not a git checkout")
     assert ignored("packaging/dist/PlainFolio-0.1.0-macos-arm64.dmg")
     assert ignored("packaging/staging/macos/PlainFolio.app/Contents/Info.plist")
-    assert not ignored("法律工作台.app/Contents/Info.plist")
+    assert not ignored("素章.app/Contents/Info.plist")
 
 
 def test_mkdir_private_omits_0o700_on_windows_and_keeps_it_on_posix(monkeypatch, tmp_path):

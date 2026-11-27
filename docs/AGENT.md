@@ -4,7 +4,7 @@
 
 ## 前置
 
-1. 首次按 README 安装并运行 `scripts/lwb init`（Windows 为 `scripts\lwb.cmd init`）。日常双击 `法律工作台.app`（Windows 为 `法律工作台.bat`）或运行 `scripts/lwb start` / `scripts\lwb.cmd start` 启动数据库与服务。
+1. 首次按 README 安装并运行 `scripts/lwb init`（Windows 为 `scripts\lwb.cmd init`）。日常双击 `素章.app`（Windows 为 `素章.bat`）或运行 `scripts/lwb start` / `scripts\lwb.cmd start` 启动数据库与服务。
 2. 需要索引材料时运行 worker：`backend/.venv/bin/python -m legal_workbench.worker --once`（Windows 为 `backend\.venv\Scripts\python.exe -m legal_workbench.worker --once`），或在长驻终端运行 `--once` 省略版本。
 3. 服务器路径导入须在 `.env` 的 `LWB_IMPORT_ROOTS` 中显式列出允许目录（系统路径分隔符分隔）；未配置时一切服务器路径导入都会被拒绝。
 

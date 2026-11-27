@@ -66,7 +66,7 @@ desktop.ini
 *.swp
 
 # 桌面安装包构建产物：绝不入库（体积大且含本机二进制）
-# 注意：这里只忽略 packaging/ 下的 .app，仓库根目录已跟踪的 法律工作台.app/ 不受影响。
+# 注意：这里只忽略 packaging/ 下的 .app，仓库根目录已跟踪的 素章.app/ 不受影响。
 packaging/build/
 packaging/dist/
 packaging/staging/

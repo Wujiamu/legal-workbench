@@ -15,4 +15,4 @@ if [ -x "$project/backend/.venv/bin/python" ] && [ -f "$project/scripts/lwb-laun
     exec "$project/backend/.venv/bin/python" "$project/scripts/lwb-launch"
 fi
 
-/usr/bin/osascript -e 'display alert "无法启动法律工作台" message "请确认法律工作台.app 位于项目根目录，且已完成安装（backend/.venv 与 scripts/lwb-launch 存在）。" as critical'
+/usr/bin/osascript -e 'display alert "无法启动素章" message "请确认 素章.app 位于项目根目录，且已完成安装（backend/.venv 与 scripts/lwb-launch 存在）。" as critical'
